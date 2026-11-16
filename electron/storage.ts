@@ -30,6 +30,8 @@ export interface Workout {
   blocks: WorkoutBlock[];
 }
 
+export type SessionFieldMode = 'visible' | 'blur' | 'hidden';
+
 export interface UserSettings {
   ftp: number;
   weightKg: number;
@@ -40,6 +42,7 @@ export interface UserSettings {
   preferredTransport: 'ant' | 'ble' | 'simulator';
   lastAntDeviceId?: number;
   lastAntHrDeviceId?: number;
+  sessionFieldModes?: Record<string, SessionFieldMode>;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
