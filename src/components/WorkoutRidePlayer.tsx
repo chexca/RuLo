@@ -23,6 +23,7 @@ import {
   AlertCircle,
   RotateCcw,
   Flame,
+  ScanEye,
   Eye,
   EyeOff,
   SlidersHorizontal,
@@ -135,6 +136,46 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
     const updated = { ...fieldModes, [key]: mode };
     setFieldModes(updated);
     onUpdateSessionFieldModes?.(updated);
+  };
+
+  const toggleFieldBlur = (key: SessionFieldKey) => {
+    const current = getFieldMode(key);
+    setFieldMode(key, current === 'blur' ? 'visible' : 'blur');
+  };
+
+  const hideField = (key: SessionFieldKey) => {
+    setFieldMode(key, 'hidden');
+  };
+
+  const renderCardActions = (key: SessionFieldKey, isSecMetric = false) => {
+    const mode = getFieldMode(key);
+    const isBlur = mode === 'blur';
+    return (
+      <div className={isSecMetric ? 'sec-metric-actions' : 'field-card-actions'}>
+        <button
+          type="button"
+          className={`field-mode-btn ${isBlur ? 'is-active-blur' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFieldBlur(key);
+          }}
+          title={isBlur ? 'Quitar desenfoque' : 'Desenfocar valor (Blur)'}
+        >
+          <ScanEye size={isSecMetric ? 13 : 15} />
+        </button>
+        <button
+          type="button"
+          className="field-mode-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            hideField(key);
+          }}
+          title="Ocultar panel (restaurar desde Campos)"
+        >
+          <EyeOff size={isSecMetric ? 13 : 15} />
+        </button>
+      </div>
+    );
   };
 
   const cycleFieldMode = (key: SessionFieldKey) => {
@@ -768,22 +809,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
                   </div>
 
-                  {/* Field Mode Button */}
-                  <button
-                    type="button"
-                    className={`field-mode-btn ${getFieldMode('power') === 'blur' ? 'is-active-blur' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cycleFieldMode('power');
-                    }}
-                    title={
-                      getFieldMode('power') === 'visible'
-                        ? 'Desenfocar potencia (clic para desenfocar)'
-                        : 'Ocultar tarjeta de potencia'
-                    }
-                  >
-                    {getFieldMode('power') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  {/* Field Actions: Blur & Hide */}
+                  {renderCardActions('power')}
                 </div>
               </div>
 
@@ -888,17 +915,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
                     Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
                   </span>
-                  <button
-                    type="button"
-                    className={`field-mode-btn ${getFieldMode('blockTimer') === 'blur' ? 'is-active-blur' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cycleFieldMode('blockTimer');
-                    }}
-                    title="Alternar visibilidad del tiempo de bloque"
-                  >
-                    {getFieldMode('blockTimer') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  {renderCardActions('blockTimer')}
                 </div>
               </div>
 
@@ -986,17 +1003,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                     {Math.round(sessionProgressPct)}% completado
                   </span>
-                  <button
-                    type="button"
-                    className={`field-mode-btn ${getFieldMode('sessionTimer') === 'blur' ? 'is-active-blur' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cycleFieldMode('sessionTimer');
-                    }}
-                    title="Alternar visibilidad del tiempo de sesión"
-                  >
-                    {getFieldMode('sessionTimer') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  {renderCardActions('sessionTimer')}
                 </div>
               </div>
 
@@ -1056,17 +1063,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
         <div className="secondary-metrics-strip">
           {cadenceVisible && (
             <div className="sec-metric-card">
-              <button
-                type="button"
-                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('cadence') === 'blur' ? 'is-active-blur' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cycleFieldMode('cadence');
-                }}
-                title="Alternar visibilidad de cadencia"
-              >
-                {getFieldMode('cadence') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+              {renderCardActions('cadence', true)}
               <div
                 className={`session-field-content ${getFieldMode('cadence') === 'blur' ? 'is-blurred' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
@@ -1090,17 +1087,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           {speedDistanceVisible && (
             <>
               <div className="sec-metric-card">
-                <button
-                  type="button"
-                  className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('speedDistance') === 'blur' ? 'is-active-blur' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    cycleFieldMode('speedDistance');
-                  }}
-                  title="Alternar visibilidad de velocidad y distancia"
-                >
-                  {getFieldMode('speedDistance') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+                {renderCardActions('speedDistance', true)}
                 <div
                   className={`session-field-content ${getFieldMode('speedDistance') === 'blur' ? 'is-blurred' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
@@ -1117,17 +1104,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               </div>
 
               <div className="sec-metric-card">
-                <button
-                  type="button"
-                  className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('speedDistance') === 'blur' ? 'is-active-blur' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    cycleFieldMode('speedDistance');
-                  }}
-                  title="Alternar visibilidad de velocidad y distancia"
-                >
-                  {getFieldMode('speedDistance') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+                {renderCardActions('speedDistance', true)}
                 <div
                   className={`session-field-content ${getFieldMode('speedDistance') === 'blur' ? 'is-blurred' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
@@ -1147,22 +1124,12 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
 
           {heartRateVisible && (
             <div className="sec-metric-card">
-              <button
-                type="button"
-                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('heartRate') === 'blur' ? 'is-active-blur' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cycleFieldMode('heartRate');
-                }}
-                title="Alternar visibilidad de pulso cardíaco"
-              >
-                {getFieldMode('heartRate') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+              {renderCardActions('heartRate', true)}
               <div
                 className={`session-field-content ${getFieldMode('heartRate') === 'blur' ? 'is-blurred' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
-                <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
+                <div style={{ flex: 1, minWidth: 0, paddingRight: 48 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
                     <div className="sec-metric-unit">Pulso Cardíaco</div>
                     {hrZoneInfo && (
@@ -1205,17 +1172,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
 
           {energyVisible && (
             <div className="sec-metric-card">
-              <button
-                type="button"
-                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('energy') === 'blur' ? 'is-active-blur' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cycleFieldMode('energy');
-                }}
-                title="Alternar visibilidad de energía quemada"
-              >
-                {getFieldMode('energy') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+              {renderCardActions('energy', true)}
               <div
                 className={`session-field-content ${getFieldMode('energy') === 'blur' ? 'is-blurred' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
@@ -1252,18 +1209,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               justifyContent: 'center',
             }}
           >
-            <button
-              type="button"
-              className={`field-mode-btn ${getFieldMode('chart') === 'blur' ? 'is-active-blur' : ''}`}
-              style={{ position: 'absolute', top: 12, right: 16, zIndex: 10 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                cycleFieldMode('chart');
-              }}
-              title="Alternar visibilidad de la gráfica"
-            >
-              {getFieldMode('chart') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+            <div style={{ position: 'absolute', top: 12, right: 16, zIndex: 10 }}>
+              {renderCardActions('chart')}
+            </div>
             <div
               className={`session-field-content ${getFieldMode('chart') === 'blur' ? 'is-blurred' : ''}`}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}

@@ -776,6 +776,27 @@ body {
 }
 
 /* Blur and discreet field controls */
+.field-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sec-metric-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(15, 23, 42, 0.75);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+}
+
 .field-mode-btn {
   display: inline-flex;
   align-items: center;
@@ -784,20 +805,28 @@ body {
   border: 1px solid transparent;
   color: var(--text-dim);
   border-radius: var(--radius-sm);
-  padding: 4px;
+  padding: 3px 5px;
   cursor: pointer;
   transition: all 0.15s ease;
   line-height: 1;
 }
 
 .field-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .field-mode-btn.is-active-blur {
   color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.field-mode-btn.is-active-blur:hover {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
 }
 
 .sec-metric-mode-btn {
@@ -809,11 +838,12 @@ body {
 
 .session-field-content {
   width: 100%;
-  transition: filter 0.2s ease;
+  transition: filter 0.25s ease, opacity 0.25s ease;
 }
 
 .session-field-content.is-blurred {
-  filter: blur(14px);
+  filter: blur(34px);
+  opacity: 0.32;
   user-select: none;
   cursor: pointer;
 }
@@ -824,6 +854,7 @@ body {
 .sec-metric-card:hover .session-field-content.is-blurred,
 .card:hover .session-field-content.is-blurred {
   filter: blur(0px);
+  opacity: 1;
 }
 
 .btn-accent-active {
