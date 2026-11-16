@@ -29,9 +29,13 @@ export interface Workout {
 export interface UserSettings {
   ftp: number;
   weightKg: number;
+  maxHr: number;
+  restingHr: number;
+  age?: number;
   soundEnabled: boolean;
   preferredTransport: 'ant' | 'ble' | 'simulator';
   lastAntDeviceId?: number;
+  lastAntHrDeviceId?: number;
 }
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
@@ -74,6 +78,15 @@ export interface TrainerStateEvent {
   errorMessage?: string;
 }
 
+export interface HrSensorStateEvent {
+  status: ConnectionStatus;
+  deviceName?: string;
+  deviceId?: number;
+  heartRateBpm?: number;
+  batteryStatus?: string;
+  errorMessage?: string;
+}
+
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
   loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
@@ -92,10 +105,15 @@ export interface ElectronAPI {
   antDisconnect: () => Promise<void>;
   antSetTargetPower: (watts: number) => Promise<{ ok: boolean; error?: string }>;
 
+  // ANT+ Heart Rate Strap control (Channel 1 parallel on same ANT+ stick)
+  antConnectHr: (hrDeviceId?: number) => Promise<{ ok: boolean; error?: string }>;
+  antDisconnectHr: () => Promise<void>;
+
   // Event subscriptions from Main process (ANT+ & Web Bluetooth picker)
   onAntState: (cb: (state: TrainerStateEvent) => void) => () => void;
   onAntDevices: (cb: (devices: DiscoveredDevice[]) => void) => () => void;
   onAntTelemetry: (cb: (telemetry: TrainerTelemetry) => void) => () => void;
+  onAntHrState: (cb: (state: HrSensorStateEvent) => void) => () => void;
 
   // Electron Web Bluetooth device chooser bridge
   onBluetoothDeviceList: (cb: (devices: { deviceId: string; deviceName: string }[]) => void) => () => void;

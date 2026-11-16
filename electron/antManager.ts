@@ -4,6 +4,7 @@ import {
   GarminStick2,
   FitnessEquipmentScanner,
   FitnessEquipmentSensor,
+  HeartRateSensor,
 } from 'ant-plus-next';
 import { execSync } from 'child_process';
 
@@ -38,6 +39,15 @@ export interface TrainerStateEvent {
   status: ConnectionStatus;
   deviceName?: string;
   antStickType?: string;
+  errorMessage?: string;
+}
+
+export interface HrSensorStateEvent {
+  status: ConnectionStatus;
+  deviceName?: string;
+  deviceId?: number;
+  heartRateBpm?: number;
+  batteryStatus?: string;
   errorMessage?: string;
 }
 
@@ -306,19 +316,25 @@ let currentStick: PatchedGarminStick3 | PatchedGarminStick2 | null = null;
 let currentStickName: string = '';
 let scanner: FitnessEquipmentScanner | null = null;
 let sensor: FitnessEquipmentSensor | null = null;
+let hrSensor: HeartRateSensor | null = null;
 let currentTargetWatts: number = 0;
 let keepAliveTimer: NodeJS.Timeout | null = null;
 let connectedDeviceName: string | undefined = undefined;
+let connectedHrDeviceId: number | undefined = undefined;
+let desiredHrDeviceId: number | undefined = undefined;
+let latestHrBpm: number | undefined = undefined;
 
 const discoveredDevicesMap = new Map<number, DiscoveredDevice>();
 
 type StateListener = (state: TrainerStateEvent) => void;
 type DevicesListener = (devices: DiscoveredDevice[]) => void;
 type TelemetryListener = (telemetry: TrainerTelemetry) => void;
+type HrStateListener = (state: HrSensorStateEvent) => void;
 
 const stateListeners = new Set<StateListener>();
 const devicesListeners = new Set<DevicesListener>();
 const telemetryListeners = new Set<TelemetryListener>();
+const hrStateListeners = new Set<HrStateListener>();
 
 function emitState(state: TrainerStateEvent) {
   for (const listener of stateListeners) {
@@ -350,6 +366,16 @@ function emitTelemetry(telemetry: TrainerTelemetry) {
   }
 }
 
+function emitHrState(state: HrSensorStateEvent) {
+  for (const listener of hrStateListeners) {
+    try {
+      listener(state);
+    } catch (e) {
+      console.error('[ANT] Error in hrState listener:', e);
+    }
+  }
+}
+
 function startKeepAlive() {
   if (keepAliveTimer) return;
   keepAliveTimer = setInterval(() => {
@@ -366,6 +392,43 @@ function stopKeepAlive() {
   }
 }
 
+async function ensureStickOpen(): Promise<{ ok: boolean; stickName?: string; error?: string }> {
+  if (currentStick) {
+    return { ok: true, stickName: currentStickName };
+  }
+
+  const conflict = checkForAntConflict();
+  if (conflict) {
+    return { ok: false, error: conflict };
+  }
+
+  if (usb.findByIds(0x0fcf, 0x1009)) {
+    currentStick = new PatchedGarminStick3();
+    currentStickName = 'ANT+ USB-m (Stick 3)';
+  } else if (usb.findByIds(0x0fcf, 0x1008)) {
+    currentStick = new PatchedGarminStick2();
+    currentStickName = 'ANT+ USB2 (Stick 2)';
+  } else {
+    const noStickMsg =
+      'No se ha detectado ningún pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
+    return { ok: false, error: noStickMsg };
+  }
+
+  try {
+    await currentStick.open();
+    return { ok: true, stickName: currentStickName };
+  } catch (openErr: any) {
+    currentStick = null;
+    const postConflict = checkForAntConflict();
+    const finalMsg =
+      postConflict ||
+      (openErr && openErr.message === 'ANT_STARTUP_TIMEOUT'
+        ? 'Tiempo de espera agotado al inicializar el pincho ANT+ USB (sin respuesta a reset).'
+        : openErr?.message || 'Error al abrir el receptor ANT+ USB.');
+    return { ok: false, error: finalMsg };
+  }
+}
+
 export function onAntState(cb: StateListener): () => void {
   stateListeners.add(cb);
   return () => stateListeners.delete(cb);
@@ -379,6 +442,11 @@ export function onAntDevices(cb: DevicesListener): () => void {
 export function onAntTelemetry(cb: TelemetryListener): () => void {
   telemetryListeners.add(cb);
   return () => telemetryListeners.delete(cb);
+}
+
+export function onAntHrState(cb: HrStateListener): () => void {
+  hrStateListeners.add(cb);
+  return () => hrStateListeners.delete(cb);
 }
 
 export async function startScan(): Promise<{ ok: boolean; stickName?: string; error?: string }> {
@@ -404,6 +472,16 @@ export async function startScan(): Promise<{ ok: boolean; stickName?: string; er
       return { ok: true, stickName: currentStickName };
     }
 
+    // If hrSensor is attached, remember target and detach temporarily while scanning FE-C
+    if (hrSensor) {
+      const savedHrTarget = desiredHrDeviceId ?? connectedHrDeviceId ?? 0;
+      desiredHrDeviceId = savedHrTarget;
+      try {
+        await hrSensor.detach();
+      } catch {}
+      hrSensor = null;
+    }
+
     if (sensor) {
       try {
         await sensor.detach();
@@ -411,41 +489,14 @@ export async function startScan(): Promise<{ ok: boolean; stickName?: string; er
       sensor = null;
     }
 
-    if (!currentStick) {
-      if (usb.findByIds(0x0fcf, 0x1009)) {
-        currentStick = new PatchedGarminStick3();
-        currentStickName = 'ANT+ USB-m (Stick 3)';
-      } else if (usb.findByIds(0x0fcf, 0x1008)) {
-        currentStick = new PatchedGarminStick2();
-        currentStickName = 'ANT+ USB2 (Stick 2)';
-      } else {
-        const noStickMsg =
-          'No se ha detectado ningún pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
-        emitState({
-          transport: 'ant',
-          status: 'error',
-          errorMessage: noStickMsg,
-        });
-        return { ok: false, error: noStickMsg };
-      }
-
-      try {
-        await currentStick.open();
-      } catch (openErr: any) {
-        currentStick = null;
-        const postConflict = checkForAntConflict();
-        const finalMsg =
-          postConflict ||
-          (openErr && openErr.message === 'ANT_STARTUP_TIMEOUT'
-            ? 'Tiempo de espera agotado al inicializar el pincho ANT+ USB (sin respuesta a reset).'
-            : openErr?.message || 'Error al abrir el receptor ANT+ USB.');
-        emitState({
-          transport: 'ant',
-          status: 'error',
-          errorMessage: finalMsg,
-        });
-        return { ok: false, error: finalMsg };
-      }
+    const stickRes = await ensureStickOpen();
+    if (!stickRes.ok || !currentStick) {
+      emitState({
+        transport: 'ant',
+        status: 'error',
+        errorMessage: stickRes.error,
+      });
+      return { ok: false, error: stickRes.error };
     }
 
     emitState({
@@ -497,6 +548,11 @@ export async function stopScan(): Promise<void> {
       antStickType: currentStickName,
     });
   }
+
+  // As soon as stopScan finishes, automatically re-attach hrSensor if desiredHrDeviceId was set!
+  if (desiredHrDeviceId !== undefined && !hrSensor && currentStick) {
+    connectHr(desiredHrDeviceId).catch(() => {});
+  }
 }
 
 export async function connectDevice(
@@ -520,41 +576,14 @@ export async function connectDevice(
       scanner = null;
     }
 
-    if (!currentStick) {
-      if (usb.findByIds(0x0fcf, 0x1009)) {
-        currentStick = new PatchedGarminStick3();
-        currentStickName = 'ANT+ USB-m (Stick 3)';
-      } else if (usb.findByIds(0x0fcf, 0x1008)) {
-        currentStick = new PatchedGarminStick2();
-        currentStickName = 'ANT+ USB2 (Stick 2)';
-      } else {
-        const noStickMsg =
-          'No se ha detectado ningún pincho ANT+ USB conectado. Conecta el receptor USB y vuelve a intentarlo.';
-        emitState({
-          transport: 'ant',
-          status: 'error',
-          errorMessage: noStickMsg,
-        });
-        return { ok: false, error: noStickMsg };
-      }
-
-      try {
-        await currentStick.open();
-      } catch (openErr: any) {
-        currentStick = null;
-        const postConflict = checkForAntConflict();
-        const finalMsg =
-          postConflict ||
-          (openErr && openErr.message === 'ANT_STARTUP_TIMEOUT'
-            ? 'Tiempo de espera agotado al inicializar el pincho ANT+ USB (sin respuesta a reset).'
-            : openErr?.message || 'Error al abrir el receptor ANT+ USB.');
-        emitState({
-          transport: 'ant',
-          status: 'error',
-          errorMessage: finalMsg,
-        });
-        return { ok: false, error: finalMsg };
-      }
+    const stickRes = await ensureStickOpen();
+    if (!stickRes.ok || !currentStick) {
+      emitState({
+        transport: 'ant',
+        status: 'error',
+        errorMessage: stickRes.error,
+      });
+      return { ok: false, error: stickRes.error };
     }
 
     const deviceDisplayName =
@@ -592,6 +621,10 @@ export async function connectDevice(
         });
       }
 
+      const hrFromTrainer =
+        state.HeartRate && state.HeartRate !== 255 ? state.HeartRate : undefined;
+      const finalHr = latestHrBpm ?? hrFromTrainer;
+
       const telemetry: TrainerTelemetry = {
         timestamp: Date.now(),
         powerWatts:
@@ -601,8 +634,7 @@ export async function connectDevice(
           state.Cadence && state.Cadence !== 255 ? state.Cadence : 0,
         speedKmh:
           Math.round(((state.RealSpeed ?? state.VirtualSpeed ?? 0) * 3.6) * 10) / 10,
-        heartRateBpm:
-          state.HeartRate && state.HeartRate !== 255 ? state.HeartRate : undefined,
+        heartRateBpm: finalHr,
         distanceMeters:
           typeof state.Distance === 'number' ? state.Distance : undefined,
       };
@@ -626,6 +658,11 @@ export async function connectDevice(
     }
     startKeepAlive();
 
+    // As soon as connectDevice finishes, automatically re-attach hrSensor if desiredHrDeviceId was set!
+    if (desiredHrDeviceId !== undefined && !hrSensor && currentStick) {
+      connectHr(desiredHrDeviceId).catch(() => {});
+    }
+
     return { ok: true };
   } catch (err: any) {
     const postConflict = checkForAntConflict();
@@ -638,6 +675,131 @@ export async function connectDevice(
       antStickType: currentStickName,
     });
     return { ok: false, error: finalMsg };
+  }
+}
+
+export async function connectHr(
+  hrDeviceId: number = 0
+): Promise<{ ok: boolean; error?: string }> {
+  const conflict = checkForAntConflict();
+  if (conflict) {
+    emitHrState({
+      status: 'error',
+      errorMessage: conflict,
+    });
+    return { ok: false, error: conflict };
+  }
+
+  desiredHrDeviceId = hrDeviceId;
+
+  // If scanner (FE-C RxScanMode) is actively scanning, stop it first so channel 1 can attach cleanly
+  if (scanner) {
+    try {
+      await scanner.detach();
+    } catch {}
+    scanner = null;
+  }
+
+  const stickRes = await ensureStickOpen();
+  if (!stickRes.ok || !currentStick) {
+    emitHrState({
+      status: 'error',
+      errorMessage: stickRes.error,
+    });
+    return { ok: false, error: stickRes.error };
+  }
+
+  const hrDisplayName =
+    hrDeviceId > 0 ? `Pulsómetro ANT+ #${hrDeviceId}` : 'Pulsómetro ANT+';
+
+  emitHrState({
+    status: 'connecting',
+    deviceName: hrDisplayName,
+    deviceId: hrDeviceId > 0 ? hrDeviceId : undefined,
+  });
+
+  if (hrSensor) {
+    try {
+      await hrSensor.detach();
+    } catch {}
+    hrSensor = null;
+  }
+
+  hrSensor = new HeartRateSensor(currentStick);
+  let isHrConnectedReported = false;
+
+  hrSensor.on('heartRateData', (state: any) => {
+    const bpm =
+      state.ComputedHeartRate &&
+      state.ComputedHeartRate > 0 &&
+      state.ComputedHeartRate < 250
+        ? state.ComputedHeartRate
+        : undefined;
+
+    if (bpm !== undefined) {
+      latestHrBpm = bpm;
+    }
+
+    const devId = state.DeviceId || hrDeviceId || undefined;
+    connectedHrDeviceId = devId;
+    const name = devId ? `Pulsómetro ANT+ #${devId}` : 'Pulsómetro ANT+';
+
+    if (!isHrConnectedReported) {
+      isHrConnectedReported = true;
+    }
+
+    emitHrState({
+      status: 'connected',
+      deviceName: name,
+      deviceId: devId,
+      heartRateBpm: bpm,
+      batteryStatus: state.BatteryStatus,
+    });
+  });
+
+  try {
+    // Attach to channel 1 with target deviceId (0 = wildcard pair nearest)
+    await hrSensor.attach(1, hrDeviceId ?? 0);
+    emitHrState({
+      status: 'connected',
+      deviceName: hrDisplayName,
+      deviceId: hrDeviceId > 0 ? hrDeviceId : undefined,
+    });
+    return { ok: true };
+  } catch (err: any) {
+    const postConflict = checkForAntConflict();
+    const finalMsg =
+      postConflict || err?.message || 'Error al conectar el pulsómetro ANT+.';
+    emitHrState({
+      status: 'error',
+      errorMessage: finalMsg,
+    });
+    return { ok: false, error: finalMsg };
+  }
+}
+
+export async function disconnectHr(): Promise<void> {
+  desiredHrDeviceId = undefined;
+  connectedHrDeviceId = undefined;
+  latestHrBpm = undefined;
+
+  if (hrSensor) {
+    try {
+      await hrSensor.detach();
+    } catch {}
+    hrSensor = null;
+  }
+
+  emitHrState({
+    status: 'disconnected',
+  });
+
+  // ONLY close currentStick if neither trainer sensor nor scanner is active!
+  if (!sensor && !scanner && currentStick) {
+    try {
+      await currentStick.close();
+    } catch {}
+    currentStick = null;
   }
 }
 
@@ -678,13 +840,6 @@ export async function disconnect(): Promise<void> {
     scanner = null;
   }
 
-  if (currentStick) {
-    try {
-      await currentStick.close();
-    } catch {}
-    currentStick = null;
-  }
-
   connectedDeviceName = undefined;
   currentTargetWatts = 0;
 
@@ -693,4 +848,12 @@ export async function disconnect(): Promise<void> {
     status: 'disconnected',
     antStickType: currentStickName,
   });
+
+  // ONLY close currentStick if hrSensor is NOT active!
+  if (!hrSensor && currentStick) {
+    try {
+      await currentStick.close();
+    } catch {}
+    currentStick = null;
+  }
 }

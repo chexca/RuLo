@@ -22,6 +22,7 @@ import {
   X,
   AlertCircle,
   RotateCcw,
+  Flame,
 } from 'lucide-react';
 import {
   Workout,
@@ -35,6 +36,9 @@ import {
   getPowerZone,
   formatTime,
   WorkoutProgressSnapshot,
+  computeRecordedKcal,
+  getHrZone,
+  HrZoneInfo,
 } from '../utils/workoutMath';
 import { WorkoutChart } from './WorkoutChart';
 import {
@@ -47,6 +51,10 @@ import { generateTcx, generateFitBase64 } from '../services/activityExporter';
 export interface WorkoutRidePlayerProps {
   workout: Workout;
   ftp: number;
+  weightKg?: number;
+  maxHr?: number;
+  restingHr?: number;
+  age?: number;
   soundEnabled: boolean;
   onToggleSound: () => void;
   onExit: () => void;
@@ -61,6 +69,10 @@ export interface WorkoutRidePlayerProps {
 export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   workout,
   ftp,
+  weightKg = 72,
+  maxHr = 190,
+  restingHr = 55,
+  age = 35,
   soundEnabled,
   onToggleSound,
   onExit,
@@ -384,12 +396,31 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   const isCountdownCritical =
     isPlaying && snapshot.blockRemainingSec <= 5 && snapshot.blockRemainingSec > 0;
 
+  // Live recorded energy (kcal & kJ) updated every second
+  const liveEnergy = useMemo(() => {
+    return computeRecordedKcal(recordedSamples, {
+      weightKg,
+      maxHr,
+      restingHr,
+      age,
+    });
+  }, [recordedSamples, weightKg, maxHr, restingHr, age]);
+
+  // Live Karvonen Heart Rate Zone
+  const hrZoneInfo: HrZoneInfo | null = useMemo(() => {
+    if (telemetry.heartRateBpm && telemetry.heartRateBpm > 0) {
+      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr);
+    }
+    return null;
+  }, [telemetry.heartRateBpm, maxHr, restingHr]);
+
   // Post-workout summary calculations
   const summaryStats = useMemo(() => {
     if (recordedSamples.length === 0) return null;
     const avgW = Math.round(
       recordedSamples.reduce((acc, s) => acc + s.powerWatts, 0) / recordedSamples.length
     );
+    const avgWkg = weightKg > 0 ? (avgW / weightKg).toFixed(2) : '0.00';
     const maxW = Math.max(...recordedSamples.map((s) => s.powerWatts));
     const avgCad = Math.round(
       recordedSamples.reduce((acc, s) => acc + s.cadenceRpm, 0) / recordedSamples.length
@@ -401,9 +432,30 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       hrSamples.length > 0
         ? Math.round(hrSamples.reduce((acc, s) => acc + (s.heartRateBpm || 0), 0) / hrSamples.length)
         : null;
+    const maxHrSample =
+      hrSamples.length > 0
+        ? Math.max(...hrSamples.map((s) => s.heartRateBpm || 0))
+        : null;
 
-    return { avgW, maxW, avgCad, totalDistKm, avgHr };
-  }, [recordedSamples]);
+    const energy = computeRecordedKcal(recordedSamples, {
+      weightKg,
+      maxHr,
+      restingHr,
+      age,
+    });
+
+    return {
+      avgW,
+      avgWkg,
+      maxW,
+      avgCad,
+      totalDistKm,
+      avgHr,
+      maxHr: maxHrSample,
+      kcal: energy.kcal,
+      workKj: energy.workKj,
+    };
+  }, [recordedSamples, weightKg, maxHr, restingHr, age]);
 
   return (
     <div className="player-container">
@@ -513,10 +565,18 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             </div>
           </div>
 
-          {/* Enormous Current Watts Display */}
-          <div style={{ display: 'flex', alignItems: 'baseline', margin: '4px 0' }}>
-            <div className="power-hero-num">{currentWatts}</div>
-            <span className="power-unit-label">W</span>
+          {/* Enormous Current Watts Display and Live W/kg */}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline' }}>
+              <div className="power-hero-num">{currentWatts}</div>
+              <span className="power-unit-label">W</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
+                {weightKg > 0 ? (currentWatts / weightKg).toFixed(2) : '0.00'}{' '}
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>W/kg</span>
+              </div>
+            </div>
           </div>
 
           {/* ERG Target Power & Bias Control */}
@@ -772,8 +832,26 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
         </div>
 
         <div className="sec-metric-card">
-          <div>
-            <div className="sec-metric-unit">Pulso Cardíaco</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
+              <div className="sec-metric-unit">Pulso Cardíaco</div>
+              {hrZoneInfo && (
+                <span
+                  style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    background: `${hrZoneInfo.color}25`,
+                    color: hrZoneInfo.color,
+                    border: `1px solid ${hrZoneInfo.color}60`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {hrZoneInfo.code} · {hrZoneInfo.name}
+                </span>
+              )}
+            </div>
             <div className="sec-metric-val">
               {telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? (
                 telemetry.heartRateBpm
@@ -787,8 +865,25 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             size={26}
             style={{
               color: telemetry.heartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
+              flexShrink: 0,
+              marginLeft: 8,
             }}
           />
+        </div>
+
+        {/* 5th metric card: Live Energy & Work */}
+        <div className="sec-metric-card">
+          <div>
+            <div className="sec-metric-unit">Energía Quemada</div>
+            <div className="sec-metric-val" style={{ color: '#fb923c' }}>
+              {liveEnergy.kcal}
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 4 }}>kcal</span>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
+              {liveEnergy.workKj} kJ mecánicos
+            </div>
+          </div>
+          <Flame size={26} style={{ color: 'var(--accent-amber)' }} />
         </div>
       </div>
 
@@ -908,11 +1003,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 </div>
               </div>
 
-              {/* Stats Summary Grid */}
+              {/* Stats Summary Grid (6 cards) */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: '12px',
                   marginBottom: '24px',
                 }}
@@ -920,66 +1015,116 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 <div
                   style={{
                     background: 'var(--bg-surface-elevated)',
-                    padding: '12px 16px',
+                    padding: '12px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
                     Vatios Medios
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>
-                    {summaryStats.avgW} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>W</span>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff' }}>
+                    {summaryStats.avgW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 600 }}>
+                    {summaryStats.avgWkg} W/kg
                   </div>
                 </div>
 
                 <div
                   style={{
                     background: 'var(--bg-surface-elevated)',
-                    padding: '12px 16px',
+                    padding: '12px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
                     Vatios Máximos
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#38bdf8' }}>
-                    {summaryStats.maxW} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>W</span>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8' }}>
+                    {summaryStats.maxW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
                   </div>
                 </div>
 
                 <div
                   style={{
                     background: 'var(--bg-surface-elevated)',
-                    padding: '12px 16px',
+                    padding: '12px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Energía Quemada
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fb923c' }}>
+                    {summaryStats.kcal} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>kcal</span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+                    {summaryStats.workKj} kJ mecánicos
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: 'var(--bg-surface-elevated)',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
                     Cadencia Media
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#a78bfa' }}>
-                    {summaryStats.avgCad} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>RPM</span>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#a78bfa' }}>
+                    {summaryStats.avgCad} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>RPM</span>
                   </div>
                 </div>
 
                 <div
                   style={{
                     background: 'var(--bg-surface-elevated)',
-                    padding: '12px 16px',
+                    padding: '12px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
                     Distancia Recorrida
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>
                     {summaryStats.totalDistKm}{' '}
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>km</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>km</span>
                   </div>
+                </div>
+
+                <div
+                  style={{
+                    background: 'var(--bg-surface-elevated)',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Pulso Cardíaco
+                  </div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f87171' }}>
+                    {summaryStats.avgHr ? (
+                      <>
+                        {summaryStats.avgHr}{' '}
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ppm</span>
+                      </>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)' }}>--</span>
+                    )}
+                  </div>
+                  {summaryStats.maxHr && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                      Máx: {summaryStats.maxHr} ppm
+                    </div>
+                  )}
                 </div>
               </div>
 

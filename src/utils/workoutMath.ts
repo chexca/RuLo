@@ -1,4 +1,4 @@
-import type { Workout, WorkoutBlock, PowerUnit } from '../types/workout';
+import type { Workout, WorkoutBlock, PowerUnit, RecordedSample } from '../types/workout';
 
 export interface PowerZoneInfo {
   zone: number;
@@ -153,11 +153,14 @@ export interface WorkoutStats {
   normalizedPower: number;
   intensityFactor: number;
   tss: number;
+  estimatedKcal: number;
+  workKj: number;
 }
 
 /**
  * Computes workout statistics: totalDuration, avgWatts, maxWatts,
- * 30-second rolling 4th-power Normalized Power (NP), Intensity Factor (IF), and TSS.
+ * 30-second rolling 4th-power Normalized Power (NP), Intensity Factor (IF), TSS,
+ * mechanical work (kJ) and estimated metabolic kcal (gross efficiency 23.9%).
  */
 export function computeWorkoutStats(workout: Workout, ftp: number): WorkoutStats {
   const blocks = workout.blocks ?? [];
@@ -170,7 +173,9 @@ export function computeWorkoutStats(workout: Workout, ftp: number): WorkoutStats
       maxWatts: 0,
       normalizedPower: 0,
       intensityFactor: 0,
-      tss: 0
+      tss: 0,
+      estimatedKcal: 0,
+      workKj: 0
     };
   }
 
@@ -215,13 +220,20 @@ export function computeWorkoutStats(workout: Workout, ftp: number): WorkoutStats
   const intensityFactor = Number((normalizedPower / safeFtp).toFixed(2));
   const tss = Math.round(((totalDurationSec * normalizedPower * (normalizedPower / safeFtp)) / (safeFtp * 3600)) * 100);
 
+  // Mechanical work in kJ: 1 W * 1 s = 1 J => sumWatts / 1000
+  // Human gross metabolic efficiency ~23.9% (0.239), 1 kcal = 4.184 kJ:
+  const workKj = Math.round(sumWatts / 1000);
+  const estimatedKcal = Math.round((sumWatts / 1000) / (4.184 * 0.239));
+
   return {
     totalDurationSec,
     avgWatts,
     maxWatts,
     normalizedPower,
     intensityFactor,
-    tss
+    tss,
+    estimatedKcal,
+    workKj
   };
 }
 
@@ -245,4 +257,90 @@ export function formatTime(totalSeconds: number): string {
     return `${hours}:${pad(minutes)}:${pad(seconds)}`;
   }
   return `${pad(minutes)}:${pad(seconds)}`;
+}
+
+/**
+ * Computes recorded energy expenditure in kcal and mechanical work in kJ from telemetry samples.
+ * Uses direct mechanical work with human gross efficiency (23.9%) when pedaling,
+ * and physiological Keytel heart rate formula as fallback when freewheeling (0W) with HR > 60 bpm.
+ */
+export function computeRecordedKcal(
+  samples: RecordedSample[],
+  settings: { weightKg: number; maxHr: number; restingHr: number; age?: number }
+): { kcal: number; workKj: number } {
+  const safeSamples = samples ?? [];
+  let totalWorkKj = 0;
+  let totalKcal = 0;
+
+  const weightKg = settings.weightKg > 0 ? settings.weightKg : 70;
+  const age = settings.age && settings.age > 0 ? settings.age : 35;
+
+  for (let i = 0; i < safeSamples.length; i++) {
+    const s = safeSamples[i];
+    let dtSec = 1;
+    if (i > 0) {
+      const dtMs = s.timestampMs - safeSamples[i - 1].timestampMs;
+      if (dtMs > 0 && dtMs < 5000) {
+        dtSec = dtMs / 1000;
+      } else {
+        const dtEl = s.elapsedSec - safeSamples[i - 1].elapsedSec;
+        dtSec = dtEl > 0 && dtEl < 5 ? dtEl : 1;
+      }
+    }
+
+    const power = s.powerWatts ?? 0;
+    if (power > 0) {
+      const dKj = (power * dtSec) / 1000;
+      totalWorkKj += dKj;
+      totalKcal += dKj / (4.184 * 0.239);
+    } else if (s.heartRateBpm && s.heartRateBpm > 60) {
+      // Keytel et al. formula for cycling / exercise kcal when power is 0 (coasting/freewheeling)
+      const hr = s.heartRateBpm;
+      const kcalPerMin = (-55.0969 + 0.6309 * hr + 0.1988 * weightKg + 0.2017 * age) / 4.184;
+      const dKcal = Math.max(0, kcalPerMin * (dtSec / 60));
+      totalKcal += dKcal;
+    }
+  }
+
+  return {
+    kcal: Math.round(totalKcal),
+    workKj: Math.round(totalWorkKj),
+  };
+}
+
+export interface HrZoneInfo {
+  zone: number;
+  code: string;
+  name: string;
+  color: string;
+}
+
+/**
+ * Returns Heart Rate Zone based on Karvonen formula (% Heart Rate Reserve).
+ * If restingHr <= 0 or restingHr >= maxHr - 20, falls back to % maxHr.
+ */
+export function getHrZone(bpm: number, maxHr: number, restingHr: number): HrZoneInfo {
+  const safeMax = Math.max(60, maxHr || 190);
+  const safeResting = Math.max(0, restingHr || 60);
+
+  let hrrPct: number;
+  if (safeResting > 0 && safeResting < safeMax - 20) {
+    hrrPct = ((bpm - safeResting) / Math.max(20, safeMax - safeResting)) * 100;
+  } else {
+    hrrPct = (bpm / safeMax) * 100;
+  }
+
+  if (hrrPct < 60) {
+    return { zone: 1, code: 'Z1', name: 'Recuperación', color: '#64748b' };
+  }
+  if (hrrPct < 70) {
+    return { zone: 2, code: 'Z2', name: 'Aeróbico', color: '#3b82f6' };
+  }
+  if (hrrPct < 80) {
+    return { zone: 3, code: 'Z3', name: 'Tempo', color: '#10b981' };
+  }
+  if (hrrPct < 90) {
+    return { zone: 4, code: 'Z4', name: 'Umbral Anaeróbico', color: '#f97316' };
+  }
+  return { zone: 5, code: 'Z5', name: 'Máximo / VO2max', color: '#ef4444' };
 }

@@ -135,7 +135,7 @@ ipcMain.handle(
 );
 
 // -----------------------------------------------------------------------------
-// IPC Routes: ANT+ Manager
+// IPC Routes: ANT+ Trainer Control
 // -----------------------------------------------------------------------------
 ipcMain.handle('ant:start-scan', async () => {
   return antManager.startScan();
@@ -155,6 +155,17 @@ ipcMain.handle('ant:disconnect', async () => {
 
 ipcMain.handle('ant:set-target-power', async (_event, watts: number) => {
   return antManager.setTargetPower(watts);
+});
+
+// -----------------------------------------------------------------------------
+// IPC Routes: ANT+ Heart Rate Strap Control (Channel 1)
+// -----------------------------------------------------------------------------
+ipcMain.handle('ant:connect-hr', async (_event, hrDeviceId?: number) => {
+  return antManager.connectHr(hrDeviceId ?? 0);
+});
+
+ipcMain.handle('ant:disconnect-hr', async () => {
+  return antManager.disconnectHr();
 });
 
 // Bluetooth device selection from renderer UI
@@ -187,6 +198,12 @@ antManager.onAntTelemetry((telemetry) => {
   }
 });
 
+antManager.onAntHrState((state) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('ant:hr-state', state);
+  }
+});
+
 // -----------------------------------------------------------------------------
 // App Lifecycle
 // -----------------------------------------------------------------------------
@@ -202,6 +219,12 @@ app.on('before-quit', async () => {
       powerSaveBlocker.stop(powerSaveBlockerId);
     } catch {}
     powerSaveBlockerId = null;
+  }
+
+  try {
+    await antManager.disconnectHr();
+  } catch (e) {
+    console.error('[Main] Error disconnecting ANT HR on quit:', e);
   }
 
   try {

@@ -4,6 +4,7 @@ import type {
   TrainerStateEvent,
   DiscoveredDevice,
   TrainerTelemetry,
+  HrSensorStateEvent,
 } from './antManager';
 
 export interface ElectronAPI {
@@ -24,10 +25,15 @@ export interface ElectronAPI {
   antDisconnect: () => Promise<void>;
   antSetTargetPower: (watts: number) => Promise<{ ok: boolean; error?: string }>;
 
+  // ANT+ Heart Rate Strap control (Channel 1 parallel on same ANT+ stick)
+  antConnectHr: (hrDeviceId?: number) => Promise<{ ok: boolean; error?: string }>;
+  antDisconnectHr: () => Promise<void>;
+
   // Event subscriptions from Main process (ANT+ & Web Bluetooth picker)
   onAntState: (cb: (state: TrainerStateEvent) => void) => () => void;
   onAntDevices: (cb: (devices: DiscoveredDevice[]) => void) => () => void;
   onAntTelemetry: (cb: (telemetry: TrainerTelemetry) => void) => () => void;
+  onAntHrState: (cb: (state: HrSensorStateEvent) => void) => () => void;
 
   // Electron Web Bluetooth device chooser bridge
   onBluetoothDeviceList: (
@@ -46,7 +52,7 @@ const api: ElectronAPI = {
   exportActivityFile: (options) =>
     ipcRenderer.invoke('storage:export-activity', options),
 
-  // ANT+ Stick Control
+  // ANT+ Trainer Stick Control
   antStartScan: () => ipcRenderer.invoke('ant:start-scan'),
   antStopScan: () => ipcRenderer.invoke('ant:stop-scan'),
   antConnectDevice: (antDeviceId: number) =>
@@ -54,6 +60,11 @@ const api: ElectronAPI = {
   antDisconnect: () => ipcRenderer.invoke('ant:disconnect'),
   antSetTargetPower: (watts: number) =>
     ipcRenderer.invoke('ant:set-target-power', watts),
+
+  // ANT+ Heart Rate Strap Control
+  antConnectHr: (hrDeviceId?: number) =>
+    ipcRenderer.invoke('ant:connect-hr', hrDeviceId),
+  antDisconnectHr: () => ipcRenderer.invoke('ant:disconnect-hr'),
 
   // Subscriptions with cleanup functions returning () => void
   onAntState: (cb: (state: TrainerStateEvent) => void) => {
@@ -77,6 +88,14 @@ const api: ElectronAPI = {
     ipcRenderer.on('ant:telemetry', listener);
     return () => {
       ipcRenderer.removeListener('ant:telemetry', listener);
+    };
+  },
+
+  onAntHrState: (cb: (state: HrSensorStateEvent) => void) => {
+    const listener = (_event: IpcRendererEvent, state: HrSensorStateEvent) => cb(state);
+    ipcRenderer.on('ant:hr-state', listener);
+    return () => {
+      ipcRenderer.removeListener('ant:hr-state', listener);
     };
   },
 

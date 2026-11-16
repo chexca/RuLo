@@ -14,6 +14,7 @@ import {
   Upload,
   Clock,
   Zap,
+  Flame,
 } from 'lucide-react';
 import { Workout, WorkoutBlock, PowerUnit, BlockType } from '../types/workout';
 import { WorkoutChart } from './WorkoutChart';
@@ -374,6 +375,11 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             <div className="stat-pill">
               <span>TSS:</span>
               <strong>{stats.tss}</strong>
+            </div>
+            <div className="stat-pill">
+              <Flame size={13} style={{ color: 'var(--accent-rose)' }} />
+              <span>Energía:</span>
+              <strong>~{stats.estimatedKcal} kcal ({stats.workKj} kJ)</strong>
             </div>
           </div>
         </div>
