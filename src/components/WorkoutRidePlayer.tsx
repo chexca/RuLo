@@ -23,6 +23,11 @@ import {
   AlertCircle,
   RotateCcw,
   Flame,
+  Eye,
+  EyeOff,
+  SlidersHorizontal,
+  Timer,
+  TimerOff,
 } from 'lucide-react';
 import {
   Workout,
@@ -30,6 +35,8 @@ import {
   RecordedSample,
   ConnectionTransport,
   ConnectionStatus,
+  SessionFieldMode,
+  SessionFieldKey,
 } from '../types/workout';
 import {
   getWorkoutSnapshotAtSecond,
@@ -56,6 +63,8 @@ export interface WorkoutRidePlayerProps {
   restingHr?: number;
   age?: number;
   soundEnabled: boolean;
+  sessionFieldModes?: Record<string, SessionFieldMode>;
+  onUpdateSessionFieldModes?: (modes: Record<string, SessionFieldMode>) => void;
   onToggleSound: () => void;
   onExit: () => void;
   telemetry: TrainerTelemetry;
@@ -74,6 +83,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   restingHr = 55,
   age = 35,
   soundEnabled,
+  sessionFieldModes,
+  onUpdateSessionFieldModes,
   onToggleSound,
   onExit,
   telemetry,
@@ -89,6 +100,104 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+
+  // Field visibility and blur modes
+  const [fieldModes, setFieldModes] = useState<Record<string, SessionFieldMode>>(
+    sessionFieldModes || {}
+  );
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (sessionFieldModes) {
+      setFieldModes(sessionFieldModes);
+    }
+  }, [sessionFieldModes]);
+
+  useEffect(() => {
+    if (!isViewMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
+        setIsViewMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isViewMenuOpen]);
+
+  const getFieldMode = (key: SessionFieldKey): SessionFieldMode => {
+    return fieldModes[key] || 'visible';
+  };
+
+  const setFieldMode = (key: SessionFieldKey, mode: SessionFieldMode) => {
+    const updated = { ...fieldModes, [key]: mode };
+    setFieldModes(updated);
+    onUpdateSessionFieldModes?.(updated);
+  };
+
+  const cycleFieldMode = (key: SessionFieldKey) => {
+    const current = getFieldMode(key);
+    const next: SessionFieldMode =
+      current === 'visible' ? 'blur' : current === 'blur' ? 'hidden' : 'visible';
+    setFieldMode(key, next);
+  };
+
+  const ALL_FIELD_CONFIG: { key: SessionFieldKey; label: string }[] = [
+    { key: 'power', label: 'Potencia y ERG' },
+    { key: 'blockTimer', label: 'Tiempo de Bloque' },
+    { key: 'sessionTimer', label: 'Tiempo de Sesión' },
+    { key: 'cadence', label: 'Cadencia' },
+    { key: 'speedDistance', label: 'Velocidad y Distancia' },
+    { key: 'heartRate', label: 'Pulso Cardíaco' },
+    { key: 'energy', label: 'Energía (kcal / kJ)' },
+    { key: 'chart', label: 'Gráfica de Sesión' },
+  ];
+
+  const setAllFieldsVisible = () => {
+    const updated: Record<string, SessionFieldMode> = {};
+    ALL_FIELD_CONFIG.forEach((f) => {
+      updated[f.key] = 'visible';
+    });
+    setFieldModes(updated);
+    onUpdateSessionFieldModes?.(updated);
+  };
+
+  const isNoClockActive =
+    getFieldMode('blockTimer') !== 'visible' && getFieldMode('sessionTimer') !== 'visible';
+
+  const toggleNoClockMode = () => {
+    const nextMode: SessionFieldMode = isNoClockActive ? 'visible' : 'blur';
+    const updated = {
+      ...fieldModes,
+      blockTimer: nextMode,
+      sessionTimer: nextMode,
+    };
+    setFieldModes(updated);
+    onUpdateSessionFieldModes?.(updated);
+  };
+
+  const alteredFieldsCount = ALL_FIELD_CONFIG.filter(
+    (f) => getFieldMode(f.key) !== 'visible'
+  ).length;
+
+  const tilePowerVisible = getFieldMode('power') !== 'hidden';
+  const tileBlockTimerVisible = getFieldMode('blockTimer') !== 'hidden';
+  const tileSessionTimerVisible = getFieldMode('sessionTimer') !== 'hidden';
+  const visibleCockpitCount =
+    (tilePowerVisible ? 1 : 0) +
+    (tileBlockTimerVisible ? 1 : 0) +
+    (tileSessionTimerVisible ? 1 : 0);
+
+  const cadenceVisible = getFieldMode('cadence') !== 'hidden';
+  const speedDistanceVisible = getFieldMode('speedDistance') !== 'hidden';
+  const heartRateVisible = getFieldMode('heartRate') !== 'hidden';
+  const energyVisible = getFieldMode('energy') !== 'hidden';
+  const hasAnySecMetric =
+    cadenceVisible || speedDistanceVisible || heartRateVisible || energyVisible;
+
+  const chartVisible = getFieldMode('chart') !== 'hidden';
 
   // References to keep accurate time delta and avoid stale closures
   const isPlayingRef = useRef(isPlaying);
@@ -496,6 +605,98 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             </span>
           </div>
 
+          {/* Quick "Modo Sin Reloj" (1 clic) */}
+          <button
+            type="button"
+            className={`btn ${isNoClockActive ? 'btn-secondary btn-accent-active' : 'btn-secondary'}`}
+            onClick={toggleNoClockMode}
+            title={
+              isNoClockActive
+                ? 'Modo Sin Reloj activo (tiempos desenfocados). Clic para volver a ver los tiempos.'
+                : 'Activar Modo Sin Reloj (desenfoca cronómetros de bloque y sesión para entrenar por sensaciones)'
+            }
+          >
+            {isNoClockActive ? (
+              <TimerOff size={16} style={{ color: 'var(--accent-cyan)' }} />
+            ) : (
+              <Timer size={16} />
+            )}
+            <span>Sin Reloj</span>
+          </button>
+
+          {/* Popover / Menú "Campos" (Vista) */}
+          <div style={{ position: 'relative' }} ref={viewMenuRef}>
+            <button
+              type="button"
+              className={`btn ${isViewMenuOpen ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+              title="Personalizar qué datos se muestran, se desenfocan o se ocultan"
+            >
+              <SlidersHorizontal size={16} />
+              <span>Campos</span>
+              {alteredFieldsCount > 0 && (
+                <span className="field-badge-count">{alteredFieldsCount}</span>
+              )}
+            </button>
+
+            {isViewMenuOpen && (
+              <div className="fields-popover-dropdown">
+                <div className="fields-popover-header">
+                  <div className="fields-popover-title">Visibilidad de Campos</div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: '0.75rem', padding: '2px 8px', color: 'var(--accent-cyan)' }}
+                    onClick={setAllFieldsVisible}
+                  >
+                    Mostrar todo
+                  </button>
+                </div>
+
+                <div className="fields-popover-list">
+                  {ALL_FIELD_CONFIG.map(({ key, label }) => {
+                    const mode = getFieldMode(key);
+                    return (
+                      <div key={key} className="fields-popover-row">
+                        <span style={{ fontWeight: 600 }}>{label}</span>
+                        <div className="field-btn-group">
+                          <button
+                            type="button"
+                            className={`field-btn-group-item ${mode === 'visible' ? 'active-visible' : ''}`}
+                            onClick={() => setFieldMode(key, 'visible')}
+                            title="Visible de forma continua"
+                          >
+                            Visible
+                          </button>
+                          <button
+                            type="button"
+                            className={`field-btn-group-item ${mode === 'blur' ? 'active-blur' : ''}`}
+                            onClick={() => setFieldMode(key, 'blur')}
+                            title="Desenfocado (visible al pasar el ratón)"
+                          >
+                            Blur
+                          </button>
+                          <button
+                            type="button"
+                            className={`field-btn-group-item ${mode === 'hidden' ? 'active-hidden' : ''}`}
+                            onClick={() => setFieldMode(key, 'hidden')}
+                            title="Completamente oculto"
+                          >
+                            Oculto
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', borderTop: '1px solid #1e293b', paddingTop: 6 }}>
+                  Tip: Pulsa el icono de ojo en cada tarjeta para alternar modos. Al pasar el cursor sobre un campo desenfocado se revela suavemente.
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Sound Toggle */}
           <button
             className="btn btn-secondary btn-icon"
@@ -529,389 +730,558 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       </div>
 
       {/* Main Cockpit Hero Grid */}
-      <div className="player-cockpit-grid">
-        {/* TILE 1: ACTUAL POWER & ERG TARGET */}
-        <div className="cockpit-tile cockpit-tile-power">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Potencia Actual
-              </span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  background: `${zoneInfo.color}25`,
-                  color: zoneInfo.color,
-                  border: `1px solid ${zoneInfo.color}60`,
-                }}
-              >
-                {zoneInfo.code} · {zoneInfo.name}
-              </span>
-            </div>
+      {visibleCockpitCount > 0 && (
+        <div className={`player-cockpit-grid ${visibleCockpitCount === 3 ? 'has-3-tiles' : ''}`}>
+          {/* TILE 1: ACTUAL POWER & ERG TARGET */}
+          {tilePowerVisible && (
+            <div className="cockpit-tile cockpit-tile-power">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Potencia Actual
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: `${zoneInfo.color}25`,
+                      color: zoneInfo.color,
+                      border: `1px solid ${zoneInfo.color}60`,
+                    }}
+                  >
+                    {zoneInfo.code} · {zoneInfo.name}
+                  </span>
+                </div>
 
-            {/* Live Delta vs Target */}
-            <div
-              style={{
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                color: Math.abs(powerDelta) <= 5 ? '#10b981' : powerDelta > 0 ? '#38bdf8' : '#f59e0b',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
-            </div>
-          </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {/* Live Delta vs Target */}
+                  <div
+                    style={{
+                      fontSize: '0.9rem',
+                      fontWeight: 700,
+                      color: Math.abs(powerDelta) <= 5 ? '#10b981' : powerDelta > 0 ? '#38bdf8' : '#f59e0b',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
+                  </div>
 
-          {/* Enormous Current Watts Display and Live W/kg */}
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline' }}>
-              <div className="power-hero-num">{currentWatts}</div>
-              <span className="power-unit-label">W</span>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-                {weightKg > 0 ? (currentWatts / weightKg).toFixed(2) : '0.00'}{' '}
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>W/kg</span>
+                  {/* Field Mode Button */}
+                  <button
+                    type="button"
+                    className={`field-mode-btn ${getFieldMode('power') === 'blur' ? 'is-active-blur' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycleFieldMode('power');
+                    }}
+                    title={
+                      getFieldMode('power') === 'visible'
+                        ? 'Desenfocar potencia (clic para desenfocar)'
+                        : 'Ocultar tarjeta de potencia'
+                    }
+                  >
+                    {getFieldMode('power') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* ERG Target Power & Bias Control */}
-          <div
-            style={{
-              padding: '12px 14px',
-              background: 'rgba(15, 23, 42, 0.75)',
-              border: '1px solid #1e293b',
-              borderRadius: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600 }}>
-                OBJETIVO ERG TACX
-              </div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>
-                {targetWatts}{' '}
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  W ({Math.round((targetWatts / ftp) * 100)}% FTP)
-                </span>
-              </div>
-            </div>
+              {/* Blurred Content Container */}
+              <div className={`session-field-content ${getFieldMode('power') === 'blur' ? 'is-blurred' : ''}`}>
+                {/* Enormous Current Watts Display and Live W/kg */}
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                    <div className="power-hero-num">{currentWatts}</div>
+                    <span className="power-unit-label">W</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
+                      {weightKg > 0 ? (currentWatts / weightKg).toFixed(2) : '0.00'}{' '}
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>W/kg</span>
+                    </div>
+                  </div>
+                </div>
 
-            {/* Quick bias buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                onClick={() => adjustBias(-10)}
-                title="Reducir 10 vatios"
-              >
-                -10
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                onClick={() => adjustBias(-5)}
-                title="Reducir 5 vatios"
-              >
-                -5
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                onClick={() => adjustBias(5)}
-                title="Añadir 5 vatios"
-              >
-                +5
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                onClick={() => adjustBias(10)}
-                title="Añadir 10 vatios"
-              >
-                +10
-              </button>
-              {biasWatts !== 0 && (
-                <button
-                  className="btn btn-ghost"
-                  style={{ padding: '4px 6px', fontSize: '0.75rem', color: '#f59e0b' }}
-                  onClick={resetBias}
-                  title="Restablecer bias a 0W"
-                >
-                  <RotateCcw size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* TILE 2: BLOCK COUNTDOWN & NEXT SECTOR */}
-        <div className={`cockpit-tile ${isCountdownCritical ? 'pulse-alert' : ''}`}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Tiempo Restante Bloque
-              </span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
-              </span>
-            </div>
-
-            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', marginTop: 4 }}>
-              {snapshot.block?.label || (snapshot.block?.type === 'ramp' ? 'Rampa' : 'Intervalo Fijo')}
-            </div>
-
-            {/* Countdown Hero Number */}
-            <div className="countdown-hero">
-              {formatTime(snapshot.blockRemainingSec)}
-            </div>
-
-            {/* Sector Progress Bar */}
-            <div
-              style={{
-                width: '100%',
-                height: '8px',
-                background: '#1e293b',
-                borderRadius: '4px',
-                overflow: 'hidden',
-                margin: '8px 0 16px',
-              }}
-            >
-              <div
-                style={{
-                  width: `${blockProgressPct}%`,
-                  height: '100%',
-                  background: isCountdownCritical
-                    ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
-                    : 'linear-gradient(90deg, #0284c7, #38bdf8)',
-                  transition: 'width 0.25s linear',
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Next Block Preview */}
-          <div
-            style={{
-              padding: '10px 14px',
-              background: 'rgba(15, 23, 42, 0.65)',
-              border: '1px solid #1e293b',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ArrowRight size={14} style={{ color: 'var(--text-dim)' }} />
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', fontWeight: 600 }}>
-                Siguiente sector:
-              </span>
-            </div>
-
-            {snapshot.nextBlock ? (
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
-                {snapshot.nextBlock.label || (snapshot.nextBlock.type === 'ramp' ? 'Rampa' : 'Fijo')}{' '}
-                · {formatTime(snapshot.nextBlock.durationSec)} @{' '}
-                <span style={{ color: 'var(--accent-cyan)' }}>
-                  {snapshot.nextBlock.type === 'steady'
-                    ? `${snapshot.nextBlock.powerStart}${snapshot.nextBlock.unit === 'ftp_percent' ? '%' : 'W'}`
-                    : `${snapshot.nextBlock.powerStart}→${snapshot.nextBlock.powerEnd}${snapshot.nextBlock.unit === 'ftp_percent' ? '%' : 'W'}`}
-                </span>
-              </div>
-            ) : (
-              <span style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)', fontWeight: 700 }}>
-                ¡Último bloque! 🎉
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* TILE 3: TOTAL SESSION REMAINING & ELAPSED */}
-        <div className="cockpit-tile">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Tiempo Restante Sesión
-              </span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                {Math.round(sessionProgressPct)}% completado
-              </span>
-            </div>
-
-            <div className="countdown-hero">
-              {formatTime(snapshot.sessionRemainingSec)}
-            </div>
-
-            {/* Total Session Progress Bar */}
-            <div
-              style={{
-                width: '100%',
-                height: '8px',
-                background: '#1e293b',
-                borderRadius: '4px',
-                overflow: 'hidden',
-                margin: '8px 0 16px',
-              }}
-            >
-              <div
-                style={{
-                  width: `${sessionProgressPct}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #10b981, #06b6d4)',
-                  transition: 'width 0.25s linear',
-                }}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: '10px 14px',
-              background: 'rgba(15, 23, 42, 0.65)',
-              border: '1px solid #1e293b',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-              Transcurrido: <strong style={{ color: '#fff' }}>{formatTime(snapshot.sessionElapsedSec)}</strong>
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-              Total: <strong style={{ color: '#fff' }}>{formatTime(totalDurationSec)}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Secondary Metrics Strip: Cadence, Speed, Distance, Heart Rate */}
-      <div className="secondary-metrics-strip">
-        <div className="sec-metric-card">
-          <div>
-            <div className="sec-metric-unit">Cadencia</div>
-            <div className="sec-metric-val">
-              {telemetry.cadenceRpm || 0}
-              {snapshot.block?.cadenceTarget && (
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-dim)', marginLeft: 6 }}>
-                  / {snapshot.block.cadenceTarget}
-                </span>
-              )}
-            </div>
-          </div>
-          <Gauge size={26} style={{ color: 'var(--accent-purple)' }} />
-        </div>
-
-        <div className="sec-metric-card">
-          <div>
-            <div className="sec-metric-unit">Velocidad</div>
-            <div className="sec-metric-val">
-              {(telemetry.speedKmh || 0).toFixed(1)}
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
-            </div>
-          </div>
-          <Compass size={26} style={{ color: 'var(--accent-cyan)' }} />
-        </div>
-
-        <div className="sec-metric-card">
-          <div>
-            <div className="sec-metric-unit">Distancia</div>
-            <div className="sec-metric-val">
-              {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
-            </div>
-          </div>
-          <TrendingUp size={26} style={{ color: 'var(--accent-emerald)' }} />
-        </div>
-
-        <div className="sec-metric-card">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
-              <div className="sec-metric-unit">Pulso Cardíaco</div>
-              {hrZoneInfo && (
-                <span
+                {/* ERG Target Power & Bias Control */}
+                <div
                   style={{
-                    fontSize: '0.68rem',
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    background: `${hrZoneInfo.color}25`,
-                    color: hrZoneInfo.color,
-                    border: `1px solid ${hrZoneInfo.color}60`,
-                    whiteSpace: 'nowrap',
+                    padding: '12px 14px',
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid #1e293b',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  {hrZoneInfo.code} · {hrZoneInfo.name}
-                </span>
-              )}
-            </div>
-            <div className="sec-metric-val">
-              {telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? (
-                telemetry.heartRateBpm
-              ) : (
-                <span style={{ color: 'var(--text-dim)' }}>--</span>
-              )}
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>ppm</span>
-            </div>
-          </div>
-          <Heart
-            size={26}
-            style={{
-              color: telemetry.heartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
-              flexShrink: 0,
-              marginLeft: 8,
-            }}
-          />
-        </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600 }}>
+                      OBJETIVO ERG TACX
+                    </div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>
+                      {targetWatts}{' '}
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        W ({Math.round((targetWatts / ftp) * 100)}% FTP)
+                      </span>
+                    </div>
+                  </div>
 
-        {/* 5th metric card: Live Energy & Work */}
-        <div className="sec-metric-card">
-          <div>
-            <div className="sec-metric-unit">Energía Quemada</div>
-            <div className="sec-metric-val" style={{ color: '#fb923c' }}>
-              {liveEnergy.kcal}
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 4 }}>kcal</span>
+                  {/* Quick bias buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      onClick={() => adjustBias(-10)}
+                      title="Reducir 10 vatios"
+                    >
+                      -10
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      onClick={() => adjustBias(-5)}
+                      title="Reducir 5 vatios"
+                    >
+                      -5
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      onClick={() => adjustBias(5)}
+                      title="Añadir 5 vatios"
+                    >
+                      +5
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      onClick={() => adjustBias(10)}
+                      title="Añadir 10 vatios"
+                    >
+                      +10
+                    </button>
+                    {biasWatts !== 0 && (
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: '4px 6px', fontSize: '0.75rem', color: '#f59e0b' }}
+                        onClick={resetBias}
+                        title="Restablecer bias a 0W"
+                      >
+                        <RotateCcw size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
-              {liveEnergy.workKj} kJ mecánicos
+          )}
+
+          {/* TILE 2: BLOCK COUNTDOWN & NEXT SECTOR */}
+          {tileBlockTimerVisible && (
+            <div className={`cockpit-tile ${isCountdownCritical ? 'pulse-alert' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Tiempo Restante Bloque
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                    Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
+                  </span>
+                  <button
+                    type="button"
+                    className={`field-mode-btn ${getFieldMode('blockTimer') === 'blur' ? 'is-active-blur' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycleFieldMode('blockTimer');
+                    }}
+                    title="Alternar visibilidad del tiempo de bloque"
+                  >
+                    {getFieldMode('blockTimer') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Blurred Content Container */}
+              <div className={`session-field-content ${getFieldMode('blockTimer') === 'blur' ? 'is-blurred' : ''}`}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', marginTop: 4 }}>
+                  {snapshot.block?.label || (snapshot.block?.type === 'ramp' ? 'Rampa' : 'Intervalo Fijo')}
+                </div>
+
+                {/* Countdown Hero Number */}
+                <div className="countdown-hero">
+                  {formatTime(snapshot.blockRemainingSec)}
+                </div>
+
+                {/* Sector Progress Bar */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '8px',
+                    background: '#1e293b',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    margin: '8px 0 16px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${blockProgressPct}%`,
+                      height: '100%',
+                      background: isCountdownCritical
+                        ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
+                        : 'linear-gradient(90deg, #0284c7, #38bdf8)',
+                      transition: 'width 0.25s linear',
+                    }}
+                  />
+                </div>
+
+                {/* Next Block Preview */}
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    border: '1px solid #1e293b',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ArrowRight size={14} style={{ color: 'var(--text-dim)' }} />
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', fontWeight: 600 }}>
+                      Siguiente sector:
+                    </span>
+                  </div>
+
+                  {snapshot.nextBlock ? (
+                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
+                      {snapshot.nextBlock.label || (snapshot.nextBlock.type === 'ramp' ? 'Rampa' : 'Fijo')}{' '}
+                      · {formatTime(snapshot.nextBlock.durationSec)} @{' '}
+                      <span style={{ color: 'var(--accent-cyan)' }}>
+                        {snapshot.nextBlock.type === 'steady'
+                          ? `${snapshot.nextBlock.powerStart}${snapshot.nextBlock.unit === 'ftp_percent' ? '%' : 'W'}`
+                          : `${snapshot.nextBlock.powerStart}→${snapshot.nextBlock.powerEnd}${snapshot.nextBlock.unit === 'ftp_percent' ? '%' : 'W'}`}
+                      </span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)', fontWeight: 700 }}>
+                      ¡Último bloque! 🎉
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-          <Flame size={26} style={{ color: 'var(--accent-amber)' }} />
+          )}
+
+          {/* TILE 3: TOTAL SESSION REMAINING & ELAPSED */}
+          {tileSessionTimerVisible && (
+            <div className="cockpit-tile">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Tiempo Restante Sesión
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                    {Math.round(sessionProgressPct)}% completado
+                  </span>
+                  <button
+                    type="button"
+                    className={`field-mode-btn ${getFieldMode('sessionTimer') === 'blur' ? 'is-active-blur' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycleFieldMode('sessionTimer');
+                    }}
+                    title="Alternar visibilidad del tiempo de sesión"
+                  >
+                    {getFieldMode('sessionTimer') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Blurred Content Container */}
+              <div className={`session-field-content ${getFieldMode('sessionTimer') === 'blur' ? 'is-blurred' : ''}`}>
+                <div className="countdown-hero">
+                  {formatTime(snapshot.sessionRemainingSec)}
+                </div>
+
+                {/* Total Session Progress Bar */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '8px',
+                    background: '#1e293b',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    margin: '8px 0 16px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${sessionProgressPct}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+                      transition: 'width 0.25s linear',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    border: '1px solid #1e293b',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                    Transcurrido: <strong style={{ color: '#fff' }}>{formatTime(snapshot.sessionElapsedSec)}</strong>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                    Total: <strong style={{ color: '#fff' }}>{formatTime(totalDurationSec)}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* Secondary Metrics Strip: Cadence, Speed, Distance, Heart Rate, Energy */}
+      {hasAnySecMetric && (
+        <div className="secondary-metrics-strip">
+          {cadenceVisible && (
+            <div className="sec-metric-card">
+              <button
+                type="button"
+                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('cadence') === 'blur' ? 'is-active-blur' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cycleFieldMode('cadence');
+                }}
+                title="Alternar visibilidad de cadencia"
+              >
+                {getFieldMode('cadence') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+              <div
+                className={`session-field-content ${getFieldMode('cadence') === 'blur' ? 'is-blurred' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+              >
+                <div>
+                  <div className="sec-metric-unit">Cadencia</div>
+                  <div className="sec-metric-val">
+                    {telemetry.cadenceRpm || 0}
+                    {snapshot.block?.cadenceTarget && (
+                      <span style={{ fontSize: '0.9rem', color: 'var(--text-dim)', marginLeft: 6 }}>
+                        / {snapshot.block.cadenceTarget}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Gauge size={26} style={{ color: 'var(--accent-purple)' }} />
+              </div>
+            </div>
+          )}
+
+          {speedDistanceVisible && (
+            <>
+              <div className="sec-metric-card">
+                <button
+                  type="button"
+                  className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('speedDistance') === 'blur' ? 'is-active-blur' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cycleFieldMode('speedDistance');
+                  }}
+                  title="Alternar visibilidad de velocidad y distancia"
+                >
+                  {getFieldMode('speedDistance') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <div
+                  className={`session-field-content ${getFieldMode('speedDistance') === 'blur' ? 'is-blurred' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+                >
+                  <div>
+                    <div className="sec-metric-unit">Velocidad</div>
+                    <div className="sec-metric-val">
+                      {(telemetry.speedKmh || 0).toFixed(1)}
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
+                    </div>
+                  </div>
+                  <Compass size={26} style={{ color: 'var(--accent-cyan)' }} />
+                </div>
+              </div>
+
+              <div className="sec-metric-card">
+                <button
+                  type="button"
+                  className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('speedDistance') === 'blur' ? 'is-active-blur' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cycleFieldMode('speedDistance');
+                  }}
+                  title="Alternar visibilidad de velocidad y distancia"
+                >
+                  {getFieldMode('speedDistance') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <div
+                  className={`session-field-content ${getFieldMode('speedDistance') === 'blur' ? 'is-blurred' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+                >
+                  <div>
+                    <div className="sec-metric-unit">Distancia</div>
+                    <div className="sec-metric-val">
+                      {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
+                    </div>
+                  </div>
+                  <TrendingUp size={26} style={{ color: 'var(--accent-emerald)' }} />
+                </div>
+              </div>
+            </>
+          )}
+
+          {heartRateVisible && (
+            <div className="sec-metric-card">
+              <button
+                type="button"
+                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('heartRate') === 'blur' ? 'is-active-blur' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cycleFieldMode('heartRate');
+                }}
+                title="Alternar visibilidad de pulso cardíaco"
+              >
+                {getFieldMode('heartRate') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+              <div
+                className={`session-field-content ${getFieldMode('heartRate') === 'blur' ? 'is-blurred' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+              >
+                <div style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
+                    <div className="sec-metric-unit">Pulso Cardíaco</div>
+                    {hrZoneInfo && (
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          background: `${hrZoneInfo.color}25`,
+                          color: hrZoneInfo.color,
+                          border: `1px solid ${hrZoneInfo.color}60`,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {hrZoneInfo.code} · {hrZoneInfo.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="sec-metric-val">
+                    {telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? (
+                      telemetry.heartRateBpm
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)' }}>--</span>
+                    )}
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>ppm</span>
+                  </div>
+                </div>
+                <Heart
+                  size={26}
+                  style={{
+                    color: telemetry.heartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
+                    flexShrink: 0,
+                    marginLeft: 8,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {energyVisible && (
+            <div className="sec-metric-card">
+              <button
+                type="button"
+                className={`field-mode-btn sec-metric-mode-btn ${getFieldMode('energy') === 'blur' ? 'is-active-blur' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cycleFieldMode('energy');
+                }}
+                title="Alternar visibilidad de energía quemada"
+              >
+                {getFieldMode('energy') === 'blur' ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+              <div
+                className={`session-field-content ${getFieldMode('energy') === 'blur' ? 'is-blurred' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+              >
+                <div>
+                  <div className="sec-metric-unit">Energía Quemada</div>
+                  <div className="sec-metric-val" style={{ color: '#fb923c' }}>
+                    {liveEnergy.kcal}
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 4 }}>kcal</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
+                    {liveEnergy.workKj} kJ mecánicos
+                  </div>
+                </div>
+                <Flame size={26} style={{ color: 'var(--accent-amber)' }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Chart Display with Active Playhead & Recorded Polyline */}
-      <div style={{ padding: '0 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div
-          className="card"
-          style={{
-            flex: 1,
-            padding: '16px 20px',
-            background: '#090d16',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <WorkoutChart
-            workout={workout}
-            ftp={ftp}
-            elapsedSec={elapsedSec}
-            recordedSamples={recordedSamples}
-            activeBlockIndex={snapshot.blockIndex}
-            onSeekBlock={handleSeekBlock}
-            height={200}
-            interactive={true}
-          />
+      {chartVisible && (
+        <div style={{ padding: '0 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div
+            className="card"
+            style={{
+              position: 'relative',
+              flex: 1,
+              padding: '16px 20px',
+              background: '#090d16',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}
+          >
+            <button
+              type="button"
+              className={`field-mode-btn ${getFieldMode('chart') === 'blur' ? 'is-active-blur' : ''}`}
+              style={{ position: 'absolute', top: 12, right: 16, zIndex: 10 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                cycleFieldMode('chart');
+              }}
+              title="Alternar visibilidad de la gráfica"
+            >
+              {getFieldMode('chart') === 'blur' ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+            <div
+              className={`session-field-content ${getFieldMode('chart') === 'blur' ? 'is-blurred' : ''}`}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+            >
+              <WorkoutChart
+                workout={workout}
+                ftp={ftp}
+                elapsedSec={elapsedSec}
+                recordedSamples={recordedSamples}
+                activeBlockIndex={snapshot.blockIndex}
+                onSeekBlock={handleSeekBlock}
+                height={200}
+                interactive={true}
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Player Controls Bar */}
       <div className="player-controls-bar">

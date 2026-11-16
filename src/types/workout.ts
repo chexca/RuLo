@@ -1,5 +1,15 @@
 export type PowerUnit = 'watts' | 'ftp_percent';
 export type BlockType = 'steady' | 'ramp';
+export type SessionFieldMode = 'visible' | 'blur' | 'hidden';
+export type SessionFieldKey =
+  | 'power'
+  | 'blockTimer'
+  | 'sessionTimer'
+  | 'cadence'
+  | 'speedDistance'
+  | 'heartRate'
+  | 'energy'
+  | 'chart';
 
 export interface WorkoutBlock {
   id: string;
@@ -36,6 +46,7 @@ export interface UserSettings {
   preferredTransport: 'ant' | 'ble' | 'simulator';
   lastAntDeviceId?: number;
   lastAntHrDeviceId?: number;
+  sessionFieldModes?: Record<string, SessionFieldMode>;
 }
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';

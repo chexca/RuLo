@@ -533,6 +533,8 @@ export const App: React.FC = () => {
           restingHr={settings.restingHr}
           age={settings.age}
           soundEnabled={settings.soundEnabled}
+          sessionFieldModes={settings.sessionFieldModes}
+          onUpdateSessionFieldModes={(modes) => handleUpdateSettings({ sessionFieldModes: modes })}
           onToggleSound={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
           onExit={() => {
             setCurrentView('library');
