@@ -642,9 +642,15 @@ body {
 /* Secondary metrics strip */
 .secondary-metrics-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
   padding: 0 24px 16px;
+}
+
+@media (max-width: 1200px) {
+  .secondary-metrics-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 768px) {

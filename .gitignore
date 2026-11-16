@@ -22,4 +22,5 @@ Thumbs.db
 # Local IDE / env files
 .env
 .env.local
+*ghtoken*
 .vscode/

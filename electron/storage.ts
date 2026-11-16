@@ -33,14 +33,21 @@ export interface Workout {
 export interface UserSettings {
   ftp: number;
   weightKg: number;
+  maxHr: number;
+  restingHr: number;
+  age?: number;
   soundEnabled: boolean;
   preferredTransport: 'ant' | 'ble' | 'simulator';
   lastAntDeviceId?: number;
+  lastAntHrDeviceId?: number;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   ftp: 240,
   weightKg: 75,
+  maxHr: 185,
+  restingHr: 55,
+  age: 35,
   soundEnabled: true,
   preferredTransport: 'ant',
 };

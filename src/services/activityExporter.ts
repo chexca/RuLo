@@ -53,9 +53,10 @@ export function generateTcx(workoutName: string, samples: RecordedSample[]): str
     }
   }
 
-  // Energy expenditure in kcal (~1 kJ = 1 kcal in cycling accounting for human efficiency)
+  // Energy expenditure in kcal using human gross efficiency 23.9% (workKj / (4.184 * 0.239))
   const avgWatts = safeSamples.length > 0 ? totalWatts / safeSamples.length : 0;
-  const calories = Math.round((avgWatts * totalTimeSeconds) / 1000);
+  const workKj = (avgWatts * totalTimeSeconds) / 1000;
+  const calories = Math.round(workKj / (4.184 * 0.239));
 
   const avgHr = hrCount > 0 ? Math.round(hrSum / hrCount) : 0;
 
@@ -278,7 +279,8 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   const avgSpeedMps = totalTimeSeconds > 0 ? totalDistanceMeters / totalTimeSeconds : 0;
   const avgHr = hrCount > 0 ? Math.round(hrSum / hrCount) : 0;
   const avgCad = cadCount > 0 ? Math.round(cadSum / cadCount) : 0;
-  const calories = Math.round((avgWatts * totalTimeSeconds) / 1000);
+  const workKj = (avgWatts * totalTimeSeconds) / 1000;
+  const calories = Math.round(workKj / (4.184 * 0.239));
 
   // Normalized power approximation (or avgWatts if short)
   const normPower = avgWatts;

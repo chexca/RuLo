@@ -17,6 +17,9 @@ import {
   Volume2,
   VolumeX,
   Upload,
+  User,
+  Heart,
+  X,
 } from 'lucide-react';
 import {
   Workout,
@@ -27,6 +30,7 @@ import {
   DiscoveredDevice,
   TrainerTelemetry,
   TrainerStateEvent,
+  HrSensorStateEvent,
 } from './types/workout';
 import { computeWorkoutStats, formatTime } from './utils/workoutMath';
 import { parseWorkoutFileContent } from './utils/workoutImporter';
@@ -109,6 +113,9 @@ const SEEDED_WORKOUTS: Workout[] = [
 const DEFAULT_SETTINGS: UserSettings = {
   ftp: 240,
   weightKg: 72,
+  maxHr: 190,
+  restingHr: 55,
+  age: 35,
   soundEnabled: true,
   preferredTransport: 'ant',
 };
@@ -122,6 +129,7 @@ export const App: React.FC = () => {
 
   // Connection Modal & Hardware State
   const [isConnModalOpen, setIsConnModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeTransport, setActiveTransport] = useState<ConnectionTransport>('none');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [deviceName, setDeviceName] = useState<string | undefined>();
@@ -129,6 +137,15 @@ export const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [discoveredAntDevices, setDiscoveredAntDevices] = useState<DiscoveredDevice[]>([]);
   const [discoveredBleDevices, setDiscoveredBleDevices] = useState<{ deviceId: string; deviceName: string }[]>([]);
+
+  // ANT+ HR Sensor State
+  const [hrStatus, setHrStatus] = useState<ConnectionStatus>('disconnected');
+  const [hrDeviceName, setHrDeviceName] = useState<string | undefined>();
+  const [hrDeviceId, setHrDeviceId] = useState<number | undefined>();
+  const [hrBpm, setHrBpm] = useState<number | undefined>();
+  const [hrBatteryStatus, setHrBatteryStatus] = useState<string | undefined>();
+  const [hrErrorMessage, setHrErrorMessage] = useState<string | undefined>();
+  const liveAntHrRef = useRef<number | undefined>(undefined);
 
   // Telemetry stream from rodillo
   const [telemetry, setTelemetry] = useState<TrainerTelemetry>({
@@ -245,11 +262,34 @@ export const App: React.FC = () => {
       setDiscoveredBleDevices(devices);
     });
 
+    const unsubAntHrState = window.electronAPI.onAntHrState?.((state: HrSensorStateEvent) => {
+      setHrStatus(state.status);
+      if (state.deviceName) setHrDeviceName(state.deviceName);
+      if (state.deviceId) setHrDeviceId(state.deviceId);
+      if (state.batteryStatus) setHrBatteryStatus(state.batteryStatus);
+      if (state.errorMessage) setHrErrorMessage(state.errorMessage);
+      else if (state.status === 'connected') setHrErrorMessage(undefined);
+
+      if (state.status === 'disconnected') {
+        liveAntHrRef.current = undefined;
+        setHrBpm(undefined);
+      } else if (state.heartRateBpm && state.heartRateBpm > 0) {
+        liveAntHrRef.current = state.heartRateBpm;
+        setHrBpm(state.heartRateBpm);
+        // Inject into telemetry so heart rate is recorded and displayed everywhere
+        setTelemetry((prev) => ({
+          ...prev,
+          heartRateBpm: state.heartRateBpm,
+        }));
+      }
+    });
+
     return () => {
       unsubAntState?.();
       unsubAntDevices?.();
       unsubAntTelemetry?.();
       unsubBleList?.();
+      unsubAntHrState?.();
     };
   }, []);
 
@@ -318,7 +358,7 @@ export const App: React.FC = () => {
 
     try {
       await bleTrainer.connect(
-        (t) => setTelemetry(t),
+        (t) => setTelemetry({ ...t, heartRateBpm: liveAntHrRef.current ?? t.heartRateBpm }),
         (s) => {
           setActiveTransport(s.transport);
           setConnectionStatus(s.status);
@@ -349,7 +389,8 @@ export const App: React.FC = () => {
     setDeviceName('Rodillo Simulado');
 
     simulatorTrainer.connect(
-      (t: TrainerTelemetry) => setTelemetry(t),
+      (t: TrainerTelemetry) =>
+        setTelemetry({ ...t, heartRateBpm: liveAntHrRef.current ?? t.heartRateBpm }),
       (s: TrainerStateEvent) => {
         setActiveTransport(s.transport);
         setConnectionStatus(s.status);
@@ -358,6 +399,41 @@ export const App: React.FC = () => {
     );
     handleUpdateSettings({ preferredTransport: 'simulator' });
   }, [handleDisconnectActiveTrainer, handleUpdateSettings]);
+
+  // Connect & Disconnect ANT+ Heart Rate Strap (Channel 1)
+  const handleConnectAntHr = useCallback(
+    async (deviceId: number = 0) => {
+      setHrErrorMessage(undefined);
+      setHrStatus('connecting');
+
+      if (window.electronAPI?.antConnectHr) {
+        const res = await window.electronAPI.antConnectHr(deviceId);
+        if (!res.ok) {
+          setHrStatus('error');
+          setHrErrorMessage(res.error || 'Fallo al conectar con el pulsómetro ANT+.');
+        } else {
+          setHrStatus('connected');
+          setHrDeviceName(deviceId === 0 ? 'Pulsómetro ANT+ (Auto)' : `Pulsómetro ANT+ (#${deviceId})`);
+          handleUpdateSettings({ lastAntHrDeviceId: deviceId });
+        }
+      } else {
+        setHrStatus('error');
+        setHrErrorMessage('La conexión del pulsómetro ANT+ requiere ejecutarse en Electron.');
+      }
+    },
+    [handleUpdateSettings]
+  );
+
+  const handleDisconnectAntHr = useCallback(async () => {
+    if (window.electronAPI?.antDisconnectHr) {
+      await window.electronAPI.antDisconnectHr();
+    }
+    setHrStatus('disconnected');
+    setHrDeviceName(undefined);
+    setHrBpm(undefined);
+    setHrBatteryStatus(undefined);
+    setTelemetry((prev) => ({ ...prev, heartRateBpm: undefined }));
+  }, []);
 
   // Send Target Power to Active Trainer (Unified router)
   const sendTargetPowerToActiveTrainer = useCallback(
@@ -452,6 +528,10 @@ export const App: React.FC = () => {
         <WorkoutRidePlayer
           workout={activeWorkout}
           ftp={settings.ftp}
+          weightKg={settings.weightKg}
+          maxHr={settings.maxHr}
+          restingHr={settings.restingHr}
+          age={settings.age}
           soundEnabled={settings.soundEnabled}
           onToggleSound={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
           onExit={() => {
@@ -481,6 +561,14 @@ export const App: React.FC = () => {
           onSelectBleDevice={handleSelectBleDevice}
           onConnectSimulator={handleConnectSimulator}
           onDisconnect={handleDisconnectActiveTrainer}
+          hrStatus={hrStatus}
+          hrDeviceName={hrDeviceName}
+          hrDeviceId={hrDeviceId}
+          hrBpm={hrBpm}
+          hrBatteryStatus={hrBatteryStatus}
+          hrErrorMessage={hrErrorMessage}
+          onConnectAntHr={handleConnectAntHr}
+          onDisconnectAntHr={handleDisconnectAntHr}
         />
       </>
     );
@@ -538,8 +626,8 @@ export const App: React.FC = () => {
         </div>
 
         <div className="header-actions">
-          {/* Quick inline FTP Editor */}
-          <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) para escalar los entrenamientos">
+          {/* Quick inline FTP & W/kg Editor */}
+          <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) y relación W/kg">
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>FTP:</span>
             <input
               type="number"
@@ -550,7 +638,35 @@ export const App: React.FC = () => {
               }
             />
             <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem' }}>W</span>
+            <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, borderLeft: '1px solid #334155', paddingLeft: 6 }}>
+              {(settings.ftp / Math.max(30, settings.weightKg || 72)).toFixed(2)} W/kg
+            </span>
           </div>
+
+          {/* Cyclist Profile Button */}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsProfileModalOpen(true)}
+            title="Ajustar peso, FC Máx, FC Reposo y edad del ciclista"
+            style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+          >
+            <User size={15} /> Perfil Ciclista
+          </button>
+
+          {/* Quick HR Strap Status Pill in Header */}
+          {hrStatus === 'connected' && (
+            <div
+              className="connection-pill"
+              onClick={() => setIsConnModalOpen(true)}
+              title="Pulsómetro ANT+ conectado en Canal 1"
+              style={{ borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' }}
+            >
+              <Heart size={14} fill="#ef4444" color="#ef4444" className="animate-pulse" />
+              <span style={{ color: '#fca5a5', fontWeight: 700, fontSize: '0.85rem' }}>
+                {hrBpm ? `${hrBpm} ppm` : 'Pulsómetro'}
+              </span>
+            </div>
+          )}
 
           {/* Sound Toggle */}
           <button
@@ -683,7 +799,10 @@ export const App: React.FC = () => {
                       <span>{stats.avgWatts} W med</span>
                     </div>
                     <div className="stat-pill">
-                      <Flame size={12} style={{ color: 'var(--accent-rose)' }} />
+                      <Flame size={12} style={{ color: '#fb923c' }} />
+                      <span>~{stats.estimatedKcal} kcal</span>
+                    </div>
+                    <div className="stat-pill">
                       <span>{stats.tss} TSS</span>
                     </div>
                     <div className="stat-pill">
@@ -750,7 +869,146 @@ export const App: React.FC = () => {
         onSelectBleDevice={handleSelectBleDevice}
         onConnectSimulator={handleConnectSimulator}
         onDisconnect={handleDisconnectActiveTrainer}
+        hrStatus={hrStatus}
+        hrDeviceName={hrDeviceName}
+        hrDeviceId={hrDeviceId}
+        hrBpm={hrBpm}
+        hrBatteryStatus={hrBatteryStatus}
+        hrErrorMessage={hrErrorMessage}
+        onConnectAntHr={handleConnectAntHr}
+        onDisconnectAntHr={handleDisconnectAntHr}
       />
+
+      {/* CYCLIST PROFILE MODAL */}
+      {isProfileModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '520px' }}
+          >
+            <div className="modal-header">
+              <div className="modal-title">
+                <User size={22} style={{ color: 'var(--accent-cyan)' }} />
+                <span>Perfil de Ciclista y Fisiología</span>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => setIsProfileModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div
+                style={{
+                  background: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '18px',
+                  fontSize: '0.82rem',
+                  color: '#bae6fd',
+                  lineHeight: 1.45,
+                }}
+              >
+                💡 <strong>Cálculo Científico:</strong> El peso y tu frecuencia cardíaca se emplean para determinar de forma exacta las <strong>kilocalorías quemadas</strong> (eficiencia bruta mecánica del 23.9% + gasto basal Keytel) y las <strong>5 Zonas de Pulso Karvonen</strong> según tu Frecuencia Cardíaca de Reserva.
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label className="form-label">Peso Corporal (kg)</label>
+                  <input
+                    type="number"
+                    min="30"
+                    max="200"
+                    step="0.5"
+                    className="input-number"
+                    value={settings.weightKg}
+                    onChange={(e) =>
+                      handleUpdateSettings({ weightKg: Math.max(30, parseFloat(e.target.value) || 70) })
+                    }
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: 4 }}>
+                    Relación: {(settings.ftp / Math.max(30, settings.weightKg)).toFixed(2)} W/kg
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label">Potencia Umbral (FTP W)</label>
+                  <input
+                    type="number"
+                    min="50"
+                    max="600"
+                    className="input-number"
+                    value={settings.ftp}
+                    onChange={(e) =>
+                      handleUpdateSettings({ ftp: Math.max(50, parseInt(e.target.value) || 200) })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label className="form-label">FC Máxima (ppm)</label>
+                  <input
+                    type="number"
+                    min="100"
+                    max="230"
+                    className="input-number"
+                    value={settings.maxHr}
+                    onChange={(e) =>
+                      handleUpdateSettings({ maxHr: Math.max(100, parseInt(e.target.value) || 190) })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label">FC en Reposo (ppm)</label>
+                  <input
+                    type="number"
+                    min="30"
+                    max="100"
+                    className="input-number"
+                    value={settings.restingHr}
+                    onChange={(e) =>
+                      handleUpdateSettings({ restingHr: Math.max(30, parseInt(e.target.value) || 55) })
+                    }
+                  />
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4 }}>
+                    Para fórmula Karvonen (FC Reserva)
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Edad (años)</label>
+                <input
+                  type="number"
+                  min="12"
+                  max="100"
+                  className="input-number"
+                  value={settings.age || 35}
+                  onChange={(e) =>
+                    handleUpdateSettings({ age: Math.max(12, parseInt(e.target.value) || 35) })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn btn-emerald"
+                onClick={() => setIsProfileModalOpen(false)}
+              >
+                Guardar y Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
