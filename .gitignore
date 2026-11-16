@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs (compiled locally)
+dist/
+dist-electron/
+release/
+out/
+
+# Local launchers & binaries
+*.bat
+*.exe
+*.msi
+*.AppImage
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local IDE / env files
+.env
+.env.local
+.vscode/

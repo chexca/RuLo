@@ -1,0 +1,101 @@
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import type { Workout, UserSettings } from './storage';
+import type {
+  TrainerStateEvent,
+  DiscoveredDevice,
+  TrainerTelemetry,
+} from './antManager';
+
+export interface ElectronAPI {
+  // Persistence: Workouts & Settings
+  loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
+  saveWorkouts: (workouts: Workout[]) => Promise<boolean>;
+  saveSettings: (settings: UserSettings) => Promise<boolean>;
+  exportActivityFile: (options: {
+    defaultFileName: string;
+    tcxContent: string;
+    fitBase64?: string;
+  }) => Promise<{ canceled: boolean; filePath?: string; error?: string }>;
+
+  // ANT+ USB Stick control (Main process)
+  antStartScan: () => Promise<{ ok: boolean; stickName?: string; error?: string }>;
+  antStopScan: () => Promise<void>;
+  antConnectDevice: (antDeviceId: number) => Promise<{ ok: boolean; error?: string }>;
+  antDisconnect: () => Promise<void>;
+  antSetTargetPower: (watts: number) => Promise<{ ok: boolean; error?: string }>;
+
+  // Event subscriptions from Main process (ANT+ & Web Bluetooth picker)
+  onAntState: (cb: (state: TrainerStateEvent) => void) => () => void;
+  onAntDevices: (cb: (devices: DiscoveredDevice[]) => void) => () => void;
+  onAntTelemetry: (cb: (telemetry: TrainerTelemetry) => void) => () => void;
+
+  // Electron Web Bluetooth device chooser bridge
+  onBluetoothDeviceList: (
+    cb: (devices: { deviceId: string; deviceName: string }[]) => void
+  ) => () => void;
+  selectBluetoothDevice: (deviceId: string) => void;
+}
+
+const api: ElectronAPI = {
+  // Persistence
+  loadData: () => ipcRenderer.invoke('storage:load-data'),
+  saveWorkouts: (workouts: Workout[]) =>
+    ipcRenderer.invoke('storage:save-workouts', workouts),
+  saveSettings: (settings: UserSettings) =>
+    ipcRenderer.invoke('storage:save-settings', settings),
+  exportActivityFile: (options) =>
+    ipcRenderer.invoke('storage:export-activity', options),
+
+  // ANT+ Stick Control
+  antStartScan: () => ipcRenderer.invoke('ant:start-scan'),
+  antStopScan: () => ipcRenderer.invoke('ant:stop-scan'),
+  antConnectDevice: (antDeviceId: number) =>
+    ipcRenderer.invoke('ant:connect-device', antDeviceId),
+  antDisconnect: () => ipcRenderer.invoke('ant:disconnect'),
+  antSetTargetPower: (watts: number) =>
+    ipcRenderer.invoke('ant:set-target-power', watts),
+
+  // Subscriptions with cleanup functions returning () => void
+  onAntState: (cb: (state: TrainerStateEvent) => void) => {
+    const listener = (_event: IpcRendererEvent, state: TrainerStateEvent) => cb(state);
+    ipcRenderer.on('ant:state', listener);
+    return () => {
+      ipcRenderer.removeListener('ant:state', listener);
+    };
+  },
+
+  onAntDevices: (cb: (devices: DiscoveredDevice[]) => void) => {
+    const listener = (_event: IpcRendererEvent, devices: DiscoveredDevice[]) => cb(devices);
+    ipcRenderer.on('ant:devices', listener);
+    return () => {
+      ipcRenderer.removeListener('ant:devices', listener);
+    };
+  },
+
+  onAntTelemetry: (cb: (telemetry: TrainerTelemetry) => void) => {
+    const listener = (_event: IpcRendererEvent, telemetry: TrainerTelemetry) => cb(telemetry);
+    ipcRenderer.on('ant:telemetry', listener);
+    return () => {
+      ipcRenderer.removeListener('ant:telemetry', listener);
+    };
+  },
+
+  onBluetoothDeviceList: (
+    cb: (devices: { deviceId: string; deviceName: string }[]) => void
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      devices: { deviceId: string; deviceName: string }[]
+    ) => cb(devices);
+    ipcRenderer.on('bluetooth-device-list', listener);
+    return () => {
+      ipcRenderer.removeListener('bluetooth-device-list', listener);
+    };
+  },
+
+  selectBluetoothDevice: (deviceId: string) => {
+    ipcRenderer.send('user-selected-bluetooth-device', deviceId);
+  },
+};
+
+contextBridge.exposeInMainWorld('electronAPI', api);

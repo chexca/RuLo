@@ -1,0 +1,31 @@
+{
+  "name": "rulo-erg",
+  "version": "1.0.0",
+  "description": "Entrenador minimalista en modo ERG para Tacx Neo 2 (ANT+ FE-C y Bluetooth)",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev:vite": "vite",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc -p tsconfig.json && vite build && npm run build:electron",
+    "start": "npm run build && electron ."
+  },
+  "dependencies": {
+    "ant-plus-next": "^0.4.0",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "usb": "^2.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^34.2.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "wait-on": "^8.0.2"
+  }
+}
