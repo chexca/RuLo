@@ -781,33 +781,37 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                     Potencia Actual
                   </span>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      background: `${zoneInfo.color}25`,
-                      color: zoneInfo.color,
-                      border: `1px solid ${zoneInfo.color}60`,
-                    }}
-                  >
-                    {zoneInfo.code} · {zoneInfo.name}
-                  </span>
+                  {getFieldMode('power') !== 'blur' && (
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: `${zoneInfo.color}25`,
+                        color: zoneInfo.color,
+                        border: `1px solid ${zoneInfo.color}60`,
+                      }}
+                    >
+                      {zoneInfo.code} · {zoneInfo.name}
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {/* Live Delta vs Target */}
-                  <div
-                    style={{
-                      fontSize: '0.9rem',
-                      fontWeight: 700,
-                      color: Math.abs(powerDelta) <= 5 ? '#10b981' : powerDelta > 0 ? '#38bdf8' : '#f59e0b',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
-                  </div>
+                  {getFieldMode('power') !== 'blur' && (
+                    <div
+                      style={{
+                        fontSize: '0.9rem',
+                        fontWeight: 700,
+                        color: Math.abs(powerDelta) <= 5 ? '#10b981' : powerDelta > 0 ? '#38bdf8' : '#f59e0b',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
+                    </div>
+                  )}
 
                   {/* Field Actions: Blur & Hide */}
                   {renderCardActions('power')}
@@ -912,9 +916,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   Tiempo Restante Bloque
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                    Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
-                  </span>
+                  {getFieldMode('blockTimer') !== 'blur' && (
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                      Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
+                    </span>
+                  )}
                   {renderCardActions('blockTimer')}
                 </div>
               </div>
@@ -1000,9 +1006,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   Tiempo Restante Sesión
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                    {Math.round(sessionProgressPct)}% completado
-                  </span>
+                  {getFieldMode('sessionTimer') !== 'blur' && (
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                      {Math.round(sessionProgressPct)}% completado
+                    </span>
+                  )}
                   {renderCardActions('sessionTimer')}
                 </div>
               </div>
