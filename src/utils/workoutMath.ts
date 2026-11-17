@@ -277,16 +277,9 @@ export function computeRecordedKcal(
 
   for (let i = 0; i < safeSamples.length; i++) {
     const s = safeSamples[i];
-    let dtSec = 1;
-    if (i > 0) {
-      const dtMs = s.timestampMs - safeSamples[i - 1].timestampMs;
-      if (dtMs > 0 && dtMs < 5000) {
-        dtSec = dtMs / 1000;
-      } else {
-        const dtEl = s.elapsedSec - safeSamples[i - 1].elapsedSec;
-        dtSec = dtEl > 0 && dtEl < 5 ? dtEl : 1;
-      }
-    }
+    // Recorded samples are strictly 1 Hz active riding seconds; using wall-clock dtMs
+    // would inflate energy across short pauses (<5s).
+    const dtSec = 1;
 
     const power = s.powerWatts ?? 0;
     if (power > 0) {
