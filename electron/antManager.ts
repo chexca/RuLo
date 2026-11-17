@@ -413,6 +413,8 @@ let scanner: FitnessEquipmentScanner | null = null;
 let sensor: FitnessEquipmentSensor | null = null;
 let hrSensor: HeartRateSensor | null = null;
 let currentTargetWatts: number = 0;
+let controlMode: 'erg' | 'resistance' = 'erg';
+let currentResistancePercent: number = 15;
 let keepAliveTimer: NodeJS.Timeout | null = null;
 let connectedDeviceName: string | undefined = undefined;
 let connectedHrDeviceId: number | undefined = undefined;
@@ -474,7 +476,10 @@ function emitHrState(state: HrSensorStateEvent) {
 function startKeepAlive() {
   if (keepAliveTimer) return;
   keepAliveTimer = setInterval(() => {
-    if (sensor && currentTargetWatts >= 0) {
+    if (!sensor) return;
+    if (controlMode === 'resistance') {
+      sensor.setBasicResistance(currentResistancePercent).catch(() => {});
+    } else if (currentTargetWatts >= 0) {
       sensor.setTargetPower(currentTargetWatts).catch(() => {});
     }
   }, 2000);
@@ -748,7 +753,9 @@ export async function connectDevice(
       antStickType: currentStickName,
     });
 
-    if (currentTargetWatts > 0) {
+    if (controlMode === 'resistance') {
+      sensor.setBasicResistance(currentResistancePercent).catch(() => {});
+    } else if (currentTargetWatts > 0) {
       sensor.setTargetPower(currentTargetWatts).catch(() => {});
     }
     startKeepAlive();
@@ -901,6 +908,7 @@ export async function disconnectHr(): Promise<void> {
 export async function setTargetPower(
   watts: number
 ): Promise<{ ok: boolean; error?: string }> {
+  controlMode = 'erg';
   currentTargetWatts = Math.round(Math.max(0, Math.min(2000, watts)));
   startKeepAlive();
 
@@ -912,6 +920,29 @@ export async function setTargetPower(
       return {
         ok: false,
         error: err?.message || 'Error al fijar objetivo de potencia ERG',
+      };
+    }
+  }
+  return { ok: true };
+}
+
+export async function setBasicResistance(
+  percent: number
+): Promise<{ ok: boolean; error?: string }> {
+  const safePercent = Number.isFinite(percent) ? percent : 0;
+  const clamped = Math.round(Math.max(0, Math.min(100, safePercent)) * 2) / 2;
+  controlMode = 'resistance';
+  currentResistancePercent = clamped;
+  startKeepAlive();
+
+  if (sensor) {
+    try {
+      await sensor.setBasicResistance(clamped);
+      return { ok: true };
+    } catch (err: any) {
+      return {
+        ok: false,
+        error: err?.message || 'Error al fijar resistencia básica ANT+',
       };
     }
   }
@@ -937,6 +968,8 @@ export async function disconnect(): Promise<void> {
 
   connectedDeviceName = undefined;
   currentTargetWatts = 0;
+  controlMode = 'erg';
+  currentResistancePercent = 15;
 
   emitState({
     transport: 'ant',

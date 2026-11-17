@@ -167,6 +167,10 @@ ipcMain.handle('ant:set-target-power', async (_event, watts: number) => {
   return antManager.setTargetPower(watts);
 });
 
+ipcMain.handle('ant:set-basic-resistance', async (_event, percent: number) => {
+  return antManager.setBasicResistance(percent);
+});
+
 // -----------------------------------------------------------------------------
 // IPC Routes: ANT+ Heart Rate Strap Control (Channel 1)
 // -----------------------------------------------------------------------------

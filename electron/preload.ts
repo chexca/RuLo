@@ -30,6 +30,7 @@ export interface ElectronAPI {
   antConnectDevice: (antDeviceId: number) => Promise<{ ok: boolean; error?: string }>;
   antDisconnect: () => Promise<void>;
   antSetTargetPower: (watts: number) => Promise<{ ok: boolean; error?: string }>;
+  antSetBasicResistance: (percent: number) => Promise<{ ok: boolean; error?: string }>;
 
   // ANT+ Heart Rate Strap control (Channel 1 parallel on same ANT+ stick)
   antConnectHr: (hrDeviceId?: number) => Promise<{ ok: boolean; error?: string }>;
@@ -73,6 +74,8 @@ const api: ElectronAPI = {
   antDisconnect: () => ipcRenderer.invoke('ant:disconnect'),
   antSetTargetPower: (watts: number) =>
     ipcRenderer.invoke('ant:set-target-power', watts),
+  antSetBasicResistance: (percent: number) =>
+    ipcRenderer.invoke('ant:set-basic-resistance', percent),
 
   // ANT+ Heart Rate Strap Control
   antConnectHr: (hrDeviceId?: number) =>
