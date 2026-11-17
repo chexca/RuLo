@@ -29,6 +29,9 @@ import {
   SlidersHorizontal,
   Timer,
   TimerOff,
+  Upload,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import {
   Workout,
@@ -38,6 +41,8 @@ import {
   ConnectionStatus,
   SessionFieldMode,
   SessionFieldKey,
+  GarminStatus,
+  GarminUploadResult,
 } from '../types/workout';
 import {
   getWorkoutSnapshotAtSecond,
@@ -76,6 +81,9 @@ export interface WorkoutRidePlayerProps {
   deviceName?: string;
   onOpenConnectionModal: () => void;
   sendTargetPowerToActiveTrainer: (watts: number) => Promise<void> | void;
+  garminStatus?: GarminStatus;
+  autoUploadGarmin?: boolean;
+  onGarminLogin?: () => Promise<{ ok: boolean; connected: boolean; displayName?: string; error?: string }>;
 }
 
 export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
@@ -98,6 +106,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   deviceName,
   onOpenConnectionModal,
   sendTargetPowerToActiveTrainer,
+  garminStatus,
+  autoUploadGarmin = false,
+  onGarminLogin,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -105,6 +116,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [garminUploadState, setGarminUploadState] = useState<
+    'idle' | 'uploading' | 'success' | 'error'
+  >('idle');
+  const [garminResult, setGarminResult] = useState<GarminUploadResult | undefined>(undefined);
+  const autoUploadedGarminRef = useRef(false);
 
   // Field visibility and blur modes
   const [fieldModes, setFieldModes] = useState<Record<string, SessionFieldMode>>(
@@ -487,6 +503,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       setElapsedSec(0);
       setIsFinished(false);
       setRecordedSamples([]);
+      setGarminUploadState('idle');
+      setGarminResult(undefined);
+      autoUploadedGarminRef.current = false;
       lastRecordedSecRef.current = -1;
       secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
       setIsPlaying(true);
@@ -620,6 +639,81 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       alert(`Error al generar FIT: ${(err as Error).message}`);
     }
   };
+
+  const handleUploadToGarmin = async (forceRelogin = false) => {
+    setGarminUploadState('uploading');
+    setGarminResult(undefined);
+
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const fileName = `${workout.name.replace(/\s+/g, '_')}_${date}.fit`;
+      const fitBase64 = generateFitBase64(workout.name, recordedSamples);
+      const tcxContent = generateTcx(workout.name, recordedSamples);
+
+      if (!garminStatus?.connected || forceRelogin) {
+        if (!onGarminLogin) {
+          setGarminUploadState('error');
+          setGarminResult({
+            ok: false,
+            error: 'No hay gestor de inicio de sesión de Garmin Connect disponible.',
+          });
+          return;
+        }
+        const loginRes = await onGarminLogin();
+        if (!loginRes.ok || !loginRes.connected) {
+          setGarminUploadState('error');
+          setGarminResult({
+            ok: false,
+            error: loginRes.error || 'No se pudo iniciar sesión en Garmin Connect.',
+          });
+          return;
+        }
+      }
+
+      if (!window.electronAPI?.garminUploadActivity) {
+        setGarminUploadState('error');
+        setGarminResult({
+          ok: false,
+          error: 'La subida directa a Garmin Connect solo está disponible en la app de escritorio.',
+        });
+        return;
+      }
+
+      const res = await window.electronAPI.garminUploadActivity({
+        fileName,
+        fitBase64,
+        tcxContent,
+        workoutName: workout.name,
+      });
+
+      if (res.ok) {
+        setGarminUploadState('success');
+        setGarminResult(res);
+      } else {
+        setGarminUploadState('error');
+        setGarminResult(res);
+      }
+    } catch (err) {
+      setGarminUploadState('error');
+      setGarminResult({
+        ok: false,
+        error: (err as Error).message || 'Error inesperado al subir a Garmin Connect.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (
+      isFinished &&
+      recordedSamples.length > 5 &&
+      autoUploadGarmin &&
+      garminStatus?.connected &&
+      !autoUploadedGarminRef.current
+    ) {
+      autoUploadedGarminRef.current = true;
+      void handleUploadToGarmin();
+    }
+  }, [isFinished, recordedSamples.length, autoUploadGarmin, garminStatus?.connected]);
 
   // Live power delta vs target (using displayWatts for smoothed view)
   const currentWatts = telemetry.powerWatts || 0;
@@ -1572,8 +1666,81 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 </div>
               )}
 
+              {garminUploadState === 'uploading' && (
+                <div className="alert-box alert-cyan" style={{ marginBottom: 16 }}>
+                  <Loader2 size={18} className="spin" />
+                  <span>Subiendo sesión a Garmin Connect...</span>
+                </div>
+              )}
+
+              {garminUploadState === 'success' && garminResult && (
+                <div className="alert-box alert-emerald garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle2 size={18} />
+                    <span className="garmin-success-badge">
+                      {garminResult.duplicate
+                        ? 'Ya existía en Garmin Connect'
+                        : '¡Subida a Garmin Connect!'}
+                    </span>
+                  </div>
+                  {garminResult.activityUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary garmin-external-btn"
+                      onClick={() =>
+                        window.electronAPI?.openExternalUrl(garminResult.activityUrl!)
+                      }
+                    >
+                      Ver en Garmin Connect <ExternalLink size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {garminUploadState === 'error' && garminResult && (
+                <div className="alert-box alert-red garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      {garminResult.needsRelogin
+                        ? garminResult.error ||
+                          'Tu sesión de Garmin Connect ha caducado. Vuelve a conectarte para subir la sesión.'
+                        : garminResult.error || 'Error al subir la sesión a Garmin Connect.'}
+                    </span>
+                  </div>
+                  {garminResult.needsRelogin && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '7px 12px', fontSize: '0.82rem', alignSelf: 'flex-end' }}
+                      onClick={() => handleUploadToGarmin(true)}
+                    >
+                      Re-conectar y subir
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Export Activity Files */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {garminUploadState !== 'success' && (
+                  <button
+                    className="btn btn-emerald"
+                    style={{ padding: '12px', fontSize: '0.95rem' }}
+                    disabled={garminUploadState === 'uploading'}
+                    onClick={() => handleUploadToGarmin(false)}
+                  >
+                    {garminUploadState === 'uploading' ? (
+                      <>
+                        <Loader2 size={18} className="spin" /> Subiendo a Garmin Connect...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={18} /> Subir a Garmin Connect
+                      </>
+                    )}
+                  </button>
+                )}
                 <button
                   className="btn btn-primary"
                   style={{ padding: '12px', fontSize: '0.95rem' }}

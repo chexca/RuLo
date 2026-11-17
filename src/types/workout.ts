@@ -48,6 +48,7 @@ export interface UserSettings {
   lastAntHrDeviceId?: number;
   sessionFieldModes?: Record<string, SessionFieldMode>;
   powerSmoothingSec?: 0 | 3 | 5;
+  autoUploadGarmin?: boolean;
 }
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
@@ -99,6 +100,21 @@ export interface HrSensorStateEvent {
   errorMessage?: string;
 }
 
+export interface GarminStatus {
+  connected: boolean;
+  displayName?: string;
+  lastVerifiedAt?: string;
+}
+
+export interface GarminUploadResult {
+  ok: boolean;
+  activityId?: string | number;
+  activityUrl?: string;
+  duplicate?: boolean;
+  needsRelogin?: boolean;
+  error?: string;
+}
+
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
   loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
@@ -130,6 +146,18 @@ export interface ElectronAPI {
   // Electron Web Bluetooth device chooser bridge
   onBluetoothDeviceList: (cb: (devices: { deviceId: string; deviceName: string }[]) => void) => () => void;
   selectBluetoothDevice: (deviceId: string) => void;
+
+  // Direct Garmin Connect integration (Main process persistent session)
+  garminGetStatus: () => Promise<GarminStatus>;
+  garminLogin: () => Promise<{ ok: boolean; connected: boolean; displayName?: string; error?: string }>;
+  garminLogout: () => Promise<void>;
+  garminUploadActivity: (options: {
+    fileName: string;
+    fitBase64?: string;
+    tcxContent: string;
+    workoutName?: string;
+  }) => Promise<GarminUploadResult>;
+  openExternalUrl: (url: string) => Promise<void>;
 }
 
 declare global {
