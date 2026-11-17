@@ -836,6 +836,30 @@ body {
   z-index: 2;
 }
 
+.power-smoothing-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-cyan);
+  border-radius: var(--radius-sm);
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.1;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.power-smoothing-pill:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: var(--accent-cyan);
+  color: #fff;
+}
+
 .session-field-content {
   width: 100%;
   transition: filter 0.25s ease, opacity 0.25s ease;

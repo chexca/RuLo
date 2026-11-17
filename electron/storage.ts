@@ -43,6 +43,7 @@ export interface UserSettings {
   lastAntDeviceId?: number;
   lastAntHrDeviceId?: number;
   sessionFieldModes?: Record<string, SessionFieldMode>;
+  powerSmoothingSec?: 0 | 3 | 5;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -53,6 +54,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   age: 35,
   soundEnabled: true,
   preferredTransport: 'ant',
+  powerSmoothingSec: 3,
 };
 
 const DEFAULT_WORKOUTS: Workout[] = [

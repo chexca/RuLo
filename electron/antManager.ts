@@ -1,4 +1,4 @@
-import * as usb from 'usb';
+﻿import * as usb from 'usb';
 import {
   GarminStick3,
   GarminStick2,
@@ -7,6 +7,7 @@ import {
   HeartRateSensor,
 } from 'ant-plus-next';
 import { execSync } from 'child_process';
+import { Libusb0Transport, isLibusb0DevicePresent } from './libusb0Transport';
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
 export type ConnectionStatus =
@@ -52,7 +53,7 @@ export interface HrSensorStateEvent {
 }
 
 const CONFLICT_MESSAGE =
-  'Garmin Express (o Rouvy/Zwift) está abierto en segundo plano y bloquea el pincho ANT+ USB. Ciérralo desde la bandeja del sistema (junto al reloj de Windows) y vuelve a pulsar Escanear.';
+  'Garmin Express (o Rouvy/Zwift) estÃ¡ abierto en segundo plano y bloquea el pincho ANT+ USB. CiÃ©rralo desde la bandeja del sistema (junto al reloj de Windows) y vuelve a pulsar Escanear.';
 
 export function checkForAntConflict(): string | null {
   try {
@@ -122,11 +123,71 @@ async function handleIncomingData(stick: any, e: Uint8Array): Promise<void> {
  * Cleanly opens the ANT USB device without inEndpoint.startPoll()
  * using controlled polling and waiting for 'startup' event.
  */
+function waitForStartup(stick: any, timeoutMs = 2500): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let done = false;
+    const onStartup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      stick.removeListener('startup', onStartup);
+      reject(new Error('ANT_STARTUP_TIMEOUT'));
+    }, timeoutMs);
+    stick.once('startup', onStartup);
+  });
+}
+
+/**
+ * Opens the stick through the native Windows libusb0.dll (libusb-win32 driver).
+ * Returns false if libusb0 is not available for this device (caller falls back to node-usb).
+ */
+async function openStickViaLibusb0(stick: any, vendorId: number, productId: number): Promise<boolean> {
+  if (!isLibusb0DevicePresent(vendorId, productId)) return false;
+  const transport = new Libusb0Transport(vendorId, productId);
+  if (!transport.open()) return false;
+
+  stick.libusb0 = transport;
+  stick.isOpenFlag = true;
+  stick.leftoverData = undefined;
+  // Route all ANT writes (reset, channel config, FE-C pages, HR) through libusb0.dll
+  stick.write = (data: Uint8Array) => transport.write(data);
+  transport.startReading((data) => {
+    handleIncomingData(stick, data).catch(() => {});
+  });
+
+  const startup = waitForStartup(stick);
+  try {
+    await stick.reset();
+    await startup;
+    console.log('[ANT] Stick opened via native libusb0.dll. maxChannels=', stick.maxChannels);
+    return true;
+  } catch (err) {
+    await closePatchedStick(stick).catch(() => {});
+    throw err;
+  }
+}
+
 async function openPatchedStick(
   stick: any,
   vendorId: number,
   productId: number
 ): Promise<boolean> {
+  // 1) Windows + libusb-win32 driver (Garmin/Zwift install): use native libusb0.dll
+  if (process.platform === 'win32') {
+    try {
+      if (await openStickViaLibusb0(stick, vendorId, productId)) return true;
+    } catch (err: any) {
+      if (err?.message === 'ANT_STARTUP_TIMEOUT') throw err;
+      console.warn('[ANT] libusb0 path failed, falling back to node-usb:', err?.message || err);
+    }
+  }
+
+  // 2) Fallback: node-usb (WinUSB / Linux / macOS)
   const usbDevice = usb.findByIds(vendorId, productId);
   if (!usbDevice) {
     return false;
@@ -242,6 +303,14 @@ async function closePatchedStick(stick: any): Promise<void> {
     }
   } catch (err) {}
 
+  if (stick.libusb0) {
+    try {
+      await stick.libusb0.close();
+    } catch (err) {}
+    stick.libusb0 = undefined;
+    delete stick.write; // restore prototype write()
+  }
+
   if (stick.iface) {
     try {
       await new Promise<void>((resolve) => {
@@ -311,6 +380,32 @@ export class PatchedGarminStick2 extends GarminStick2 {
   }
 }
 
+
+/**
+ * Detaches the FE-C RxScan scanner and WAITS for the stick to confirm channel 0 is
+ * closed + unassigned. Without this, the late CHANNEL_CLOSED event makes the zombie
+ * scanner send unassignChannel(0) AFTER the trainer sensor has taken channel 0,
+ * killing trainer telemetry and ERG commands.
+ */
+async function detachScannerSafely(sc: any): Promise<void> {
+  if (!sc) return;
+  const detached = new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, 1500);
+    sc.once('detached', () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
+  try {
+    await sc.detach();
+  } catch {}
+  await detached;
+  try {
+    sc.removeAllListeners();
+  } catch {}
+  // Small settle time so the stick finishes processing the unassign
+  await new Promise((r) => setTimeout(r, 150));
+}
 // Internal State
 let currentStick: PatchedGarminStick3 | PatchedGarminStick2 | null = null;
 let currentStickName: string = '';
@@ -410,7 +505,7 @@ async function ensureStickOpen(): Promise<{ ok: boolean; stickName?: string; err
     currentStickName = 'ANT+ USB2 (Stick 2)';
   } else {
     const noStickMsg =
-      'No se ha detectado ningún pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
+      'No se ha detectado ningÃºn pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
     return { ok: false, error: noStickMsg };
   }
 
@@ -537,7 +632,7 @@ export async function startScan(): Promise<{ ok: boolean; stickName?: string; er
 export async function stopScan(): Promise<void> {
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }
@@ -571,7 +666,7 @@ export async function connectDevice(
   try {
     if (scanner) {
       try {
-        await scanner.detach();
+        await detachScannerSafely(scanner);
       } catch {}
       scanner = null;
     }
@@ -608,7 +703,7 @@ export async function connectDevice(
 
     sensor.on('fitnessData', (state: any) => {
       const devId = state.DeviceId || antDeviceId;
-      const trainerName = `Rodillo ANT+ FE-C #${devId}`;
+      const trainerName = devId ? `Rodillo ANT+ FE-C #${devId}` : 'Rodillo ANT+ FE-C';
 
       if (!isConnectedReported) {
         isConnectedReported = true;
@@ -695,7 +790,7 @@ export async function connectHr(
   // If scanner (FE-C RxScanMode) is actively scanning, stop it first so channel 1 can attach cleanly
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }
@@ -710,7 +805,7 @@ export async function connectHr(
   }
 
   const hrDisplayName =
-    hrDeviceId > 0 ? `Pulsómetro ANT+ #${hrDeviceId}` : 'Pulsómetro ANT+';
+    hrDeviceId > 0 ? `PulsÃ³metro ANT+ #${hrDeviceId}` : 'PulsÃ³metro ANT+';
 
   emitHrState({
     status: 'connecting',
@@ -742,7 +837,7 @@ export async function connectHr(
 
     const devId = state.DeviceId || hrDeviceId || undefined;
     connectedHrDeviceId = devId;
-    const name = devId ? `Pulsómetro ANT+ #${devId}` : 'Pulsómetro ANT+';
+    const name = devId ? `PulsÃ³metro ANT+ #${devId}` : 'PulsÃ³metro ANT+';
 
     if (!isHrConnectedReported) {
       isHrConnectedReported = true;
@@ -769,7 +864,7 @@ export async function connectHr(
   } catch (err: any) {
     const postConflict = checkForAntConflict();
     const finalMsg =
-      postConflict || err?.message || 'Error al conectar el pulsómetro ANT+.';
+      postConflict || err?.message || 'Error al conectar el pulsÃ³metro ANT+.';
     emitHrState({
       status: 'error',
       errorMessage: finalMsg,
@@ -835,7 +930,7 @@ export async function disconnect(): Promise<void> {
 
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }

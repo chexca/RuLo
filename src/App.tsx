@@ -118,6 +118,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   age: 35,
   soundEnabled: true,
   preferredTransport: 'ant',
+  powerSmoothingSec: 3,
 };
 
 export const App: React.FC = () => {
@@ -196,7 +197,15 @@ export const App: React.FC = () => {
       }
 
       setWorkouts(loadedWorkouts && loadedWorkouts.length > 0 ? loadedWorkouts : SEEDED_WORKOUTS);
-      setSettings(loadedSettings || DEFAULT_SETTINGS);
+      setSettings(
+        loadedSettings
+          ? {
+              ...DEFAULT_SETTINGS,
+              ...loadedSettings,
+              powerSmoothingSec: loadedSettings.powerSmoothingSec ?? 3,
+            }
+          : DEFAULT_SETTINGS
+      );
     };
 
     initData();
@@ -535,6 +544,8 @@ export const App: React.FC = () => {
           soundEnabled={settings.soundEnabled}
           sessionFieldModes={settings.sessionFieldModes}
           onUpdateSessionFieldModes={(modes) => handleUpdateSettings({ sessionFieldModes: modes })}
+          powerSmoothingSec={settings.powerSmoothingSec ?? 3}
+          onUpdatePowerSmoothing={(sec) => handleUpdateSettings({ powerSmoothingSec: sec })}
           onToggleSound={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
           onExit={() => {
             setCurrentView('library');
@@ -985,18 +996,37 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="form-label">Edad (años)</label>
-                <input
-                  type="number"
-                  min="12"
-                  max="100"
-                  className="input-number"
-                  value={settings.age || 35}
-                  onChange={(e) =>
-                    handleUpdateSettings({ age: Math.max(12, parseInt(e.target.value) || 35) })
-                  }
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label className="form-label">Edad (años)</label>
+                  <input
+                    type="number"
+                    min="12"
+                    max="100"
+                    className="input-number"
+                    value={settings.age || 35}
+                    onChange={(e) =>
+                      handleUpdateSettings({ age: Math.max(12, parseInt(e.target.value) || 35) })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label">Suavizado de Potencia</label>
+                  <select
+                    className="select-input"
+                    value={settings.powerSmoothingSec ?? 3}
+                    onChange={(e) =>
+                      handleUpdateSettings({
+                        powerSmoothingSec: (parseInt(e.target.value) || 3) as 0 | 3 | 5,
+                      })
+                    }
+                  >
+                    <option value={0}>Instantánea (0s)</option>
+                    <option value={3}>Media 3s (Recomendado)</option>
+                    <option value={5}>Media 5s (Estable)</option>
+                  </select>
+                </div>
               </div>
             </div>
 

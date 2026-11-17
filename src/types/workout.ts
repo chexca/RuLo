@@ -47,6 +47,7 @@ export interface UserSettings {
   lastAntDeviceId?: number;
   lastAntHrDeviceId?: number;
   sessionFieldModes?: Record<string, SessionFieldMode>;
+  powerSmoothingSec?: 0 | 3 | 5;
 }
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
