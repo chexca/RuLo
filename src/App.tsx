@@ -44,6 +44,7 @@ import { WorkoutChart } from './components/WorkoutChart';
 import { ConnectionModal } from './components/ConnectionModal';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutRidePlayer } from './components/WorkoutRidePlayer';
+import { NumericInput } from './components/NumericInput';
 
 // Seeded default workouts if library is empty
 const SEEDED_WORKOUTS: Workout[] = [
@@ -663,20 +664,21 @@ export const App: React.FC = () => {
       <div className="app-container">
         <header className="app-header">
           <div className="brand-section">
-            <div className="brand-logo">
-              <Zap size={22} fill="currentColor" />
-            </div>
-            <div className="brand-title">
-              RULO ERG <span className="brand-badge">Tacx Neo 2</span>
-            </div>
+            <img
+              src="./favicon.png"
+              alt="RuLo ERG"
+              style={{ width: 38, height: 38, borderRadius: 9, display: 'block' }}
+            />
+            <div className="brand-title">RULO ERG</div>
           </div>
           <div className="ftp-badge-pill">
             <span style={{ color: 'var(--text-muted)' }}>FTP:</span>
-            <input
-              type="number"
+            <NumericInput
               className="ftp-input"
               value={settings.ftp}
-              onChange={(e) => handleUpdateSettings({ ftp: Math.max(50, parseInt(e.target.value) || 200) })}
+              min={1}
+              fallback={200}
+              onChange={(val) => handleUpdateSettings({ ftp: val })}
             />
             <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>W</span>
           </div>
@@ -701,25 +703,24 @@ export const App: React.FC = () => {
       {/* Top Application Header */}
       <header className="app-header">
         <div className="brand-section">
-          <div className="brand-logo">
-            <Zap size={22} fill="currentColor" />
-          </div>
-          <div className="brand-title">
-            RULO ERG <span className="brand-badge">Tacx Neo 2 Edition</span>
-          </div>
+          <img
+            src="./favicon.png"
+            alt="RuLo ERG"
+            style={{ width: 38, height: 38, borderRadius: 9, display: 'block' }}
+          />
+          <div className="brand-title">RULO ERG</div>
         </div>
 
         <div className="header-actions">
           {/* Quick inline FTP & W/kg Editor */}
           <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) y relación W/kg">
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>FTP:</span>
-            <input
-              type="number"
+            <NumericInput
               className="ftp-input"
               value={settings.ftp}
-              onChange={(e) =>
-                handleUpdateSettings({ ftp: Math.max(50, parseInt(e.target.value) || 200) })
-              }
+              min={1}
+              fallback={200}
+              onChange={(val) => handleUpdateSettings({ ftp: val })}
             />
             <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem' }}>W</span>
             <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, borderLeft: '1px solid #334155', paddingLeft: 6 }}>
@@ -1003,16 +1004,13 @@ export const App: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="form-label">Peso Corporal (kg)</label>
-                  <input
-                    type="number"
-                    min="30"
-                    max="200"
-                    step="0.5"
+                  <NumericInput
+                    min={1}
+                    allowDecimal
+                    fallback={70}
                     className="input-number"
                     value={settings.weightKg}
-                    onChange={(e) =>
-                      handleUpdateSettings({ weightKg: Math.max(30, parseFloat(e.target.value) || 70) })
-                    }
+                    onChange={(val) => handleUpdateSettings({ weightKg: val })}
                   />
                   <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: 4 }}>
                     Relación: {(settings.ftp / Math.max(30, settings.weightKg)).toFixed(2)} W/kg
@@ -1021,15 +1019,12 @@ export const App: React.FC = () => {
 
                 <div>
                   <label className="form-label">Potencia Umbral (FTP W)</label>
-                  <input
-                    type="number"
-                    min="50"
-                    max="600"
+                  <NumericInput
+                    min={1}
+                    fallback={200}
                     className="input-number"
                     value={settings.ftp}
-                    onChange={(e) =>
-                      handleUpdateSettings({ ftp: Math.max(50, parseInt(e.target.value) || 200) })
-                    }
+                    onChange={(val) => handleUpdateSettings({ ftp: val })}
                   />
                 </div>
               </div>
@@ -1037,29 +1032,23 @@ export const App: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="form-label">FC Máxima (ppm)</label>
-                  <input
-                    type="number"
-                    min="100"
-                    max="230"
+                  <NumericInput
+                    min={1}
+                    fallback={190}
                     className="input-number"
                     value={settings.maxHr}
-                    onChange={(e) =>
-                      handleUpdateSettings({ maxHr: Math.max(100, parseInt(e.target.value) || 190) })
-                    }
+                    onChange={(val) => handleUpdateSettings({ maxHr: val })}
                   />
                 </div>
 
                 <div>
                   <label className="form-label">FC en Reposo (ppm)</label>
-                  <input
-                    type="number"
-                    min="30"
-                    max="100"
+                  <NumericInput
+                    min={1}
+                    fallback={55}
                     className="input-number"
                     value={settings.restingHr}
-                    onChange={(e) =>
-                      handleUpdateSettings({ restingHr: Math.max(30, parseInt(e.target.value) || 55) })
-                    }
+                    onChange={(val) => handleUpdateSettings({ restingHr: val })}
                   />
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4 }}>
                     Para fórmula Karvonen (FC Reserva)
@@ -1070,15 +1059,14 @@ export const App: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label className="form-label">Edad (años)</label>
-                  <input
-                    type="number"
-                    min="12"
-                    max="100"
+                  <NumericInput
+                    min={1}
+                    allowEmpty
+                    placeholder="35"
+                    fallback={35}
                     className="input-number"
-                    value={settings.age || 35}
-                    onChange={(e) =>
-                      handleUpdateSettings({ age: Math.max(12, parseInt(e.target.value) || 35) })
-                    }
+                    value={settings.age}
+                    onChangeOptional={(val) => handleUpdateSettings({ age: val })}
                   />
                 </div>
 

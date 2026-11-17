@@ -58,6 +58,7 @@ if (!gotTheLock) {
 }
 
 function createMainWindow(): BrowserWindow {
+  const iconPath = path.join(__dirname, '../build/icon.ico');
   const win = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -65,6 +66,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 660,
     backgroundColor: '#090d16',
     autoHideMenuBar: true,
+    ...(fs.existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
