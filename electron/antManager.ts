@@ -7,6 +7,7 @@ import {
   HeartRateSensor,
 } from 'ant-plus-next';
 import { execSync } from 'child_process';
+import { Libusb0Transport, isLibusb0DevicePresent } from './libusb0Transport';
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
 export type ConnectionStatus =
@@ -122,11 +123,71 @@ async function handleIncomingData(stick: any, e: Uint8Array): Promise<void> {
  * Cleanly opens the ANT USB device without inEndpoint.startPoll()
  * using controlled polling and waiting for 'startup' event.
  */
+function waitForStartup(stick: any, timeoutMs = 2500): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let done = false;
+    const onStartup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      stick.removeListener('startup', onStartup);
+      reject(new Error('ANT_STARTUP_TIMEOUT'));
+    }, timeoutMs);
+    stick.once('startup', onStartup);
+  });
+}
+
+/**
+ * Opens the stick through the native Windows libusb0.dll (libusb-win32 driver).
+ * Returns false if libusb0 is not available for this device (caller falls back to node-usb).
+ */
+async function openStickViaLibusb0(stick: any, vendorId: number, productId: number): Promise<boolean> {
+  if (!isLibusb0DevicePresent(vendorId, productId)) return false;
+  const transport = new Libusb0Transport(vendorId, productId);
+  if (!transport.open()) return false;
+
+  stick.libusb0 = transport;
+  stick.isOpenFlag = true;
+  stick.leftoverData = undefined;
+  // Route all ANT writes (reset, channel config, FE-C pages, HR) through libusb0.dll
+  stick.write = (data: Uint8Array) => transport.write(data);
+  transport.startReading((data) => {
+    handleIncomingData(stick, data).catch(() => {});
+  });
+
+  const startup = waitForStartup(stick);
+  try {
+    await stick.reset();
+    await startup;
+    console.log('[ANT] Stick opened via native libusb0.dll. maxChannels=', stick.maxChannels);
+    return true;
+  } catch (err) {
+    await closePatchedStick(stick).catch(() => {});
+    throw err;
+  }
+}
+
 async function openPatchedStick(
   stick: any,
   vendorId: number,
   productId: number
 ): Promise<boolean> {
+  // 1) Windows + libusb-win32 driver (Garmin/Zwift install): use native libusb0.dll
+  if (process.platform === 'win32') {
+    try {
+      if (await openStickViaLibusb0(stick, vendorId, productId)) return true;
+    } catch (err: any) {
+      if (err?.message === 'ANT_STARTUP_TIMEOUT') throw err;
+      console.warn('[ANT] libusb0 path failed, falling back to node-usb:', err?.message || err);
+    }
+  }
+
+  // 2) Fallback: node-usb (WinUSB / Linux / macOS)
   const usbDevice = usb.findByIds(vendorId, productId);
   if (!usbDevice) {
     return false;
@@ -241,6 +302,14 @@ async function closePatchedStick(stick: any): Promise<void> {
       await stick.detachAll();
     }
   } catch (err) {}
+
+  if (stick.libusb0) {
+    try {
+      await stick.libusb0.close();
+    } catch (err) {}
+    stick.libusb0 = undefined;
+    delete stick.write; // restore prototype write()
+  }
 
   if (stick.iface) {
     try {
@@ -608,7 +677,7 @@ export async function connectDevice(
 
     sensor.on('fitnessData', (state: any) => {
       const devId = state.DeviceId || antDeviceId;
-      const trainerName = `Rodillo ANT+ FE-C #${devId}`;
+      const trainerName = devId ? `Rodillo ANT+ FE-C #${devId}` : 'Rodillo ANT+ FE-C';
 
       if (!isConnectedReported) {
         isConnectedReported = true;
