@@ -1,4 +1,4 @@
-import * as usb from 'usb';
+﻿import * as usb from 'usb';
 import {
   GarminStick3,
   GarminStick2,
@@ -53,7 +53,7 @@ export interface HrSensorStateEvent {
 }
 
 const CONFLICT_MESSAGE =
-  'Garmin Express (o Rouvy/Zwift) está abierto en segundo plano y bloquea el pincho ANT+ USB. Ciérralo desde la bandeja del sistema (junto al reloj de Windows) y vuelve a pulsar Escanear.';
+  'Garmin Express (o Rouvy/Zwift) estÃ¡ abierto en segundo plano y bloquea el pincho ANT+ USB. CiÃ©rralo desde la bandeja del sistema (junto al reloj de Windows) y vuelve a pulsar Escanear.';
 
 export function checkForAntConflict(): string | null {
   try {
@@ -380,6 +380,32 @@ export class PatchedGarminStick2 extends GarminStick2 {
   }
 }
 
+
+/**
+ * Detaches the FE-C RxScan scanner and WAITS for the stick to confirm channel 0 is
+ * closed + unassigned. Without this, the late CHANNEL_CLOSED event makes the zombie
+ * scanner send unassignChannel(0) AFTER the trainer sensor has taken channel 0,
+ * killing trainer telemetry and ERG commands.
+ */
+async function detachScannerSafely(sc: any): Promise<void> {
+  if (!sc) return;
+  const detached = new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, 1500);
+    sc.once('detached', () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
+  try {
+    await sc.detach();
+  } catch {}
+  await detached;
+  try {
+    sc.removeAllListeners();
+  } catch {}
+  // Small settle time so the stick finishes processing the unassign
+  await new Promise((r) => setTimeout(r, 150));
+}
 // Internal State
 let currentStick: PatchedGarminStick3 | PatchedGarminStick2 | null = null;
 let currentStickName: string = '';
@@ -479,7 +505,7 @@ async function ensureStickOpen(): Promise<{ ok: boolean; stickName?: string; err
     currentStickName = 'ANT+ USB2 (Stick 2)';
   } else {
     const noStickMsg =
-      'No se ha detectado ningún pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
+      'No se ha detectado ningÃºn pincho ANT+ USB conectado (Stick 2 o Stick 3). Conecta el receptor USB y vuelve a intentarlo.';
     return { ok: false, error: noStickMsg };
   }
 
@@ -606,7 +632,7 @@ export async function startScan(): Promise<{ ok: boolean; stickName?: string; er
 export async function stopScan(): Promise<void> {
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }
@@ -640,7 +666,7 @@ export async function connectDevice(
   try {
     if (scanner) {
       try {
-        await scanner.detach();
+        await detachScannerSafely(scanner);
       } catch {}
       scanner = null;
     }
@@ -764,7 +790,7 @@ export async function connectHr(
   // If scanner (FE-C RxScanMode) is actively scanning, stop it first so channel 1 can attach cleanly
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }
@@ -779,7 +805,7 @@ export async function connectHr(
   }
 
   const hrDisplayName =
-    hrDeviceId > 0 ? `Pulsómetro ANT+ #${hrDeviceId}` : 'Pulsómetro ANT+';
+    hrDeviceId > 0 ? `PulsÃ³metro ANT+ #${hrDeviceId}` : 'PulsÃ³metro ANT+';
 
   emitHrState({
     status: 'connecting',
@@ -811,7 +837,7 @@ export async function connectHr(
 
     const devId = state.DeviceId || hrDeviceId || undefined;
     connectedHrDeviceId = devId;
-    const name = devId ? `Pulsómetro ANT+ #${devId}` : 'Pulsómetro ANT+';
+    const name = devId ? `PulsÃ³metro ANT+ #${devId}` : 'PulsÃ³metro ANT+';
 
     if (!isHrConnectedReported) {
       isHrConnectedReported = true;
@@ -838,7 +864,7 @@ export async function connectHr(
   } catch (err: any) {
     const postConflict = checkForAntConflict();
     const finalMsg =
-      postConflict || err?.message || 'Error al conectar el pulsómetro ANT+.';
+      postConflict || err?.message || 'Error al conectar el pulsÃ³metro ANT+.';
     emitHrState({
       status: 'error',
       errorMessage: finalMsg,
@@ -904,7 +930,7 @@ export async function disconnect(): Promise<void> {
 
   if (scanner) {
     try {
-      await scanner.detach();
+      await detachScannerSafely(scanner);
     } catch {}
     scanner = null;
   }

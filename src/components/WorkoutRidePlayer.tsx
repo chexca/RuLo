@@ -66,6 +66,8 @@ export interface WorkoutRidePlayerProps {
   soundEnabled: boolean;
   sessionFieldModes?: Record<string, SessionFieldMode>;
   onUpdateSessionFieldModes?: (modes: Record<string, SessionFieldMode>) => void;
+  powerSmoothingSec?: 0 | 3 | 5;
+  onUpdatePowerSmoothing?: (sec: 0 | 3 | 5) => void;
   onToggleSound: () => void;
   onExit: () => void;
   telemetry: TrainerTelemetry;
@@ -86,6 +88,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   soundEnabled,
   sessionFieldModes,
   onUpdateSessionFieldModes,
+  powerSmoothingSec = 3,
+  onUpdatePowerSmoothing,
   onToggleSound,
   onExit,
   telemetry,
@@ -259,6 +263,72 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   const lastRecordedSecRef = useRef<number>(-1);
   const lastWallTimeRef = useRef<number | null>(null);
 
+  // Power smoothing buffer (packet arrival timestamps and watts, kept up to 10s)
+  const powerBufferRef = useRef<{ t: number; w: number }[]>([]);
+
+  // 1-second packet accumulator for true mean integer-second recording
+  const secondAccumulatorRef = useRef<{
+    sumW: number;
+    sumCad: number;
+    nCad: number;
+    sumHr: number;
+    nHr: number;
+    n: number;
+  }>({ sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 });
+
+  // Ingest incoming telemetry packets into smoothing buffer and 1-second recording accumulator
+  useEffect(() => {
+    const now = telemetry.timestamp || Date.now();
+    const w = telemetry.powerWatts || 0;
+
+    // Buffer for power smoothing (keep latest 10 seconds)
+    powerBufferRef.current.push({ t: now, w });
+    const cutoff = now - 10000;
+    powerBufferRef.current = powerBufferRef.current.filter((sample) => sample.t >= cutoff);
+
+    // Accumulate packets for true 1-second mean recording if riding
+    if (isPlayingRef.current) {
+      const acc = secondAccumulatorRef.current;
+      acc.sumW += w;
+      acc.n += 1;
+
+      const cad = telemetry.cadenceRpm;
+      if (typeof cad === 'number' && cad > 0) {
+        acc.sumCad += cad;
+        acc.nCad += 1;
+      }
+
+      const hr = telemetry.heartRateBpm;
+      if (typeof hr === 'number' && hr > 0) {
+        acc.sumHr += hr;
+        acc.nHr += 1;
+      }
+    }
+  }, [telemetry.timestamp, telemetry.powerWatts, telemetry.cadenceRpm, telemetry.heartRateBpm]);
+
+  // Smoothed power for UI display (0s instant, 3s or 5s rolling mean)
+  const smoothingSec = powerSmoothingSec ?? 3;
+  const displayWatts = useMemo(() => {
+    const rawWatts = telemetry.powerWatts || 0;
+    if (smoothingSec === 0) {
+      return Math.round(rawWatts);
+    }
+    const now = telemetry.timestamp || Date.now();
+    const windowStart = now - smoothingSec * 1000;
+    const samples = powerBufferRef.current.filter((s) => s.t >= windowStart);
+    if (samples.length === 0) {
+      return Math.round(rawWatts);
+    }
+    const sum = samples.reduce((acc, s) => acc + s.w, 0);
+    return Math.round(sum / samples.length);
+  }, [telemetry.timestamp, telemetry.powerWatts, smoothingSec]);
+
+  const handleCycleSmoothing = () => {
+    const current = powerSmoothingSec ?? 3;
+    const next: 0 | 3 | 5 = current === 0 ? 3 : current === 3 ? 5 : 0;
+    onUpdatePowerSmoothing?.(next);
+  };
+
   // Compute total duration of workout
   const totalDurationSec = useMemo(() => {
     return (workout.blocks || []).reduce((acc, b) => acc + (b.durationSec || 0), 0);
@@ -361,17 +431,43 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
         if (currentSec !== lastRecordedSecRef.current) {
           lastRecordedSecRef.current = currentSec;
           const curTelem = telemetryRef.current;
+          const acc = secondAccumulatorRef.current;
+
+          // Power: mean of packets in this second if any, else current power
+          const recPower = acc.n > 0 ? Math.round(acc.sumW / acc.n) : (curTelem.powerWatts || 0);
+
+          // Cadence: mean ignoring zeros if any was > 0, else 0 if had packets, else curTelem
+          let recCadence: number;
+          if (acc.nCad > 0) {
+            recCadence = Math.round(acc.sumCad / acc.nCad);
+          } else if (acc.n > 0) {
+            recCadence = 0;
+          } else {
+            recCadence = curTelem.cadenceRpm || 0;
+          }
+
+          // Heart Rate: mean of values > 0, if none then curTelem.heartRateBpm or undefined
+          let recHr: number | undefined;
+          if (acc.nHr > 0) {
+            recHr = Math.round(acc.sumHr / acc.nHr);
+          } else {
+            recHr = curTelem.heartRateBpm && curTelem.heartRateBpm > 0 ? curTelem.heartRateBpm : undefined;
+          }
+
+          // Reset accumulator for the next second
+          secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
+
           setRecordedSamples((prevSamples) => [
             ...prevSamples,
             {
               timestampMs: now,
               elapsedSec: currentSec,
-              powerWatts: curTelem.powerWatts || 0,
+              powerWatts: recPower,
               targetWatts: currentSnapshot.targetWatts,
-              cadenceRpm: curTelem.cadenceRpm || 0,
+              cadenceRpm: recCadence,
               speedKmh: curTelem.speedKmh || 0,
               distanceMeters: curTelem.distanceMeters || 0,
-              heartRateBpm: curTelem.heartRateBpm,
+              heartRateBpm: recHr,
             },
           ]);
         }
@@ -391,6 +487,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       setIsFinished(false);
       setRecordedSamples([]);
       lastRecordedSecRef.current = -1;
+      secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
       setIsPlaying(true);
       return;
     }
@@ -523,11 +620,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
     }
   };
 
-  // Live power delta vs target
+  // Live power delta vs target (using displayWatts for smoothed view)
   const currentWatts = telemetry.powerWatts || 0;
   const targetWatts = snapshot.targetWatts;
-  const powerDelta = currentWatts - targetWatts;
-  const zoneInfo = getPowerZone(currentWatts, ftp);
+  const powerDelta = displayWatts - targetWatts;
+  const zoneInfo = getPowerZone(displayWatts, ftp);
 
   // Block progress percentage
   const blockDuration = snapshot.block?.durationSec || 1;
@@ -798,7 +895,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {/* Live Delta vs Target */}
                   {getFieldMode('power') !== 'blur' && (
                     <div
@@ -813,6 +910,19 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     </div>
                   )}
 
+                  {/* Power Smoothing Selector Pill */}
+                  <button
+                    type="button"
+                    className="power-smoothing-pill"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCycleSmoothing();
+                    }}
+                    title="Suavizado de potencia mostrada (media móvil)"
+                  >
+                    {powerSmoothingSec === 0 ? 'Inst.' : `${powerSmoothingSec}s`}
+                  </button>
+
                   {/* Field Actions: Blur & Hide */}
                   {renderCardActions('power')}
                 </div>
@@ -823,12 +933,12 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 {/* Enormous Current Watts Display and Live W/kg */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                    <div className="power-hero-num">{currentWatts}</div>
+                    <div className="power-hero-num">{displayWatts}</div>
                     <span className="power-unit-label">W</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-                      {weightKg > 0 ? (currentWatts / weightKg).toFixed(2) : '0.00'}{' '}
+                      {weightKg > 0 ? (displayWatts / weightKg).toFixed(2) : '0.00'}{' '}
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>W/kg</span>
                     </div>
                   </div>
