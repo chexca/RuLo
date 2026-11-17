@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Workout, WorkoutBlock, PowerUnit, BlockType } from '../types/workout';
 import { WorkoutChart } from './WorkoutChart';
+import { NumericInput } from './NumericInput';
 import { computeWorkoutStats, formatTime, resolveWatts } from '../utils/workoutMath';
 import { parseWorkoutFileContent } from '../utils/workoutImporter';
 
@@ -165,9 +166,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
   };
 
   const updateBlock = (index: number, updates: Partial<WorkoutBlock>) => {
-    const updated = [...blocks];
-    updated[index] = { ...updated[index], ...updates };
-    setBlocks(updated);
+    setBlocks((prev) => prev.map((b, i) => (i === index ? { ...b, ...updates } : b)));
   };
 
   const duplicateBlock = (index: number) => {
@@ -463,13 +462,12 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           >
             <div>
               <label className="form-label">Repeticiones</label>
-              <input
-                type="number"
-                min="1"
-                max="50"
+              <NumericInput
+                min={1}
+                fallback={1}
                 className="input-number"
                 value={genRepeats}
-                onChange={(e) => setGenRepeats(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={setGenRepeats}
               />
             </div>
 
@@ -493,37 +491,37 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                 Bloque de Trabajo (On)
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
+                <NumericInput
+                  min={0}
+                  allowZero
+                  fallback={0}
                   placeholder="Min"
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genWorkMin}
-                  onChange={(e) => setGenWorkMin(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={setGenWorkMin}
                 />
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>m</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
+                <NumericInput
+                  min={0}
+                  max={59}
+                  allowZero
+                  fallback={0}
                   placeholder="Seg"
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genWorkSec}
-                  onChange={(e) => setGenWorkSec(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={setGenWorkSec}
                 />
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>s</span>
                 <span style={{ color: 'var(--text-muted)' }}>@</span>
-                <input
-                  type="number"
-                  min="10"
-                  max="1500"
+                <NumericInput
+                  min={1}
+                  fallback={100}
                   className="input-number"
                   style={{ width: '80px' }}
                   value={genWorkPower}
-                  onChange={(e) => setGenWorkPower(parseInt(e.target.value) || 100)}
+                  onChange={setGenWorkPower}
                 />
                 <select
                   className="select-input"
@@ -557,37 +555,37 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                 Recuperación (Off)
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
+                <NumericInput
+                  min={0}
+                  allowZero
+                  fallback={0}
                   placeholder="Min"
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genRestMin}
-                  onChange={(e) => setGenRestMin(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={setGenRestMin}
                 />
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>m</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
+                <NumericInput
+                  min={0}
+                  max={59}
+                  allowZero
+                  fallback={0}
                   placeholder="Seg"
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genRestSec}
-                  onChange={(e) => setGenRestSec(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={setGenRestSec}
                 />
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>s</span>
                 <span style={{ color: 'var(--text-muted)' }}>@</span>
-                <input
-                  type="number"
-                  min="10"
-                  max="1500"
+                <NumericInput
+                  min={1}
+                  fallback={50}
                   className="input-number"
                   style={{ width: '80px' }}
                   value={genRestPower}
-                  onChange={(e) => setGenRestPower(parseInt(e.target.value) || 50)}
+                  onChange={setGenRestPower}
                 />
                 <select
                   className="select-input"
@@ -670,30 +668,25 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
 
               {/* Duration (Min + Sec) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="number"
-                  min="0"
-                  max="180"
+                <NumericInput
+                  min={0}
+                  allowZero
+                  fallback={0}
                   className="input-number"
                   style={{ width: '60px' }}
                   value={durationMin}
-                  onChange={(e) => {
-                    const m = Math.max(0, parseInt(e.target.value) || 0);
-                    updateBlock(idx, { durationSec: m * 60 + durationSecRem });
-                  }}
+                  onChange={(m) => updateBlock(idx, { durationSec: m * 60 + durationSecRem })}
                 />
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>m</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
+                <NumericInput
+                  min={0}
+                  max={59}
+                  allowZero
+                  fallback={0}
                   className="input-number"
                   style={{ width: '56px' }}
                   value={durationSecRem}
-                  onChange={(e) => {
-                    const s = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                    updateBlock(idx, { durationSec: durationMin * 60 + s });
-                  }}
+                  onChange={(s) => updateBlock(idx, { durationSec: durationMin * 60 + s })}
                 />
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>s</span>
               </div>
@@ -701,42 +694,32 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
               {/* Power & Unit + Live Converted Equivalent */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {block.type === 'steady' ? (
-                  <input
-                    type="number"
-                    min="10"
-                    max="1500"
+                  <NumericInput
+                    min={1}
+                    fallback={block.powerStart}
                     className="input-number"
                     style={{ width: '75px' }}
                     value={block.powerStart}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
-                      updateBlock(idx, { powerStart: val, powerEnd: val });
-                    }}
+                    onChange={(val) => updateBlock(idx, { powerStart: val, powerEnd: val })}
                   />
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input
-                      type="number"
-                      min="10"
-                      max="1500"
+                    <NumericInput
+                      min={1}
+                      fallback={block.powerStart}
                       className="input-number"
                       style={{ width: '62px' }}
                       value={block.powerStart}
-                      onChange={(e) =>
-                        updateBlock(idx, { powerStart: parseInt(e.target.value) || 0 })
-                      }
+                      onChange={(val) => updateBlock(idx, { powerStart: val })}
                     />
                     <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>→</span>
-                    <input
-                      type="number"
-                      min="10"
-                      max="1500"
+                    <NumericInput
+                      min={1}
+                      fallback={block.powerEnd}
                       className="input-number"
                       style={{ width: '62px' }}
                       value={block.powerEnd}
-                      onChange={(e) =>
-                        updateBlock(idx, { powerEnd: parseInt(e.target.value) || 0 })
-                      }
+                      onChange={(val) => updateBlock(idx, { powerEnd: val })}
                     />
                   </div>
                 )}
@@ -776,18 +759,14 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
 
               {/* Target Cadence */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input
-                  type="number"
-                  min="40"
-                  max="140"
+                <NumericInput
+                  min={1}
+                  allowEmpty
                   placeholder="RPM"
                   className="input-number"
                   style={{ width: '64px' }}
-                  value={block.cadenceTarget || ''}
-                  onChange={(e) => {
-                    const v = e.target.value ? parseInt(e.target.value) : undefined;
-                    updateBlock(idx, { cadenceTarget: v });
-                  }}
+                  value={block.cadenceTarget}
+                  onChangeOptional={(v) => updateBlock(idx, { cadenceTarget: v })}
                 />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>RPM</span>
               </div>

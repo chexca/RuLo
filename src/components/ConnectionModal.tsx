@@ -18,6 +18,7 @@ import {
   ConnectionStatus,
   DiscoveredDevice,
 } from '../types/workout';
+import { NumericInput } from './NumericInput';
 
 export interface ConnectionModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
   onDisconnectAntHr,
 }) => {
   const [activeTab, setActiveTab] = useState<'ant' | 'ble' | 'simulator'>('ant');
-  const [customHrId, setCustomHrId] = useState<string>('');
+  const [customHrId, setCustomHrId] = useState<number | undefined>(undefined);
 
   if (!isOpen) return null;
 
@@ -486,22 +487,22 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
-                  <input
-                    type="number"
+                  <NumericInput
+                    allowEmpty
+                    min={1}
                     placeholder="ID ANT+ específico (opcional)"
                     className="input-number"
                     style={{ flex: 1, padding: '7px 10px', fontSize: '0.82rem' }}
                     value={customHrId}
-                    onChange={(e) => setCustomHrId(e.target.value)}
+                    onChangeOptional={setCustomHrId}
                   />
                   <button
                     className="btn btn-secondary"
                     style={{ padding: '7px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
                     onClick={() => {
-                      const id = parseInt(customHrId) || 0;
-                      if (id > 0) onConnectAntHr?.(id);
+                      if (customHrId && customHrId > 0) onConnectAntHr?.(customHrId);
                     }}
-                    disabled={!customHrId || isHrConnecting}
+                    disabled={!customHrId || customHrId <= 0 || isHrConnecting}
                   >
                     Conectar por ID
                   </button>

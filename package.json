@@ -9,7 +9,7 @@
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc -p tsconfig.json && vite build && npm run build:electron",
     "start": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win portable"
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "build": {
     "appId": "com.chexca.ruloerg",
@@ -20,6 +20,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "build/icon.ico",
       "package.json"
     ],
     "asarUnpack": [
@@ -27,15 +28,23 @@
       "node_modules/usb/**/*"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
-      ],
-      "artifactName": "RuLo-ERG-${version}-Portable.exe"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RuLo ERG",
+      "artifactName": "RuLo-ERG-${version}-Setup.exe"
     }
   },
   "dependencies": {
