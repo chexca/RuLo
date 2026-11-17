@@ -941,7 +941,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 12px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(getPrevZoneMinWatts(targetWatts, ftp))}
-                  title="Saltar al mínimo de la zona anterior"
+                  title="Saltar a la zona anterior (+10 W sobre el mínimo)"
                 >
                   <ChevronLeft size={15} /> Zona -
                 </button>
@@ -950,7 +950,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-primary"
                   style={{ padding: '7px 12px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(getNextZoneMinWatts(targetWatts, ftp))}
-                  title="Saltar al mínimo de la zona superior"
+                  title="Saltar a la zona superior (+10 W sobre el mínimo)"
                 >
                   Zona + <ChevronRight size={15} />
                 </button>
@@ -1014,8 +1014,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     background: isCurrentTargetZone ? `${z.color}28` : 'rgba(15, 23, 42, 0.75)',
                     color: isCurrentTargetZone ? '#ffffff' : '#cbd5e1',
                   }}
-                  onClick={() => updateTargetWatts(z.minWatts)}
-                  title={`${z.code} ${z.name}: mínimo ${z.minWatts} W (${z.minPct}% FTP)`}
+                  onClick={() => updateTargetWatts(z.jumpWatts)}
+                  title={`${z.code} ${z.name}: saltar a ${z.jumpWatts} W (mín. ${z.minWatts} W, ${z.minPct}% FTP)`}
                 >
                   <span
                     className="freeride-zone-dot"
@@ -1023,7 +1023,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   />
                   <strong>{z.code}</strong>
                   <span>·</span>
-                  <span className="tabular">{z.minWatts}W</span>
+                  <span className="tabular">{z.jumpWatts}W</span>
                 </button>
               );
             })}

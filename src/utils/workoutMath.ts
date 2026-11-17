@@ -9,21 +9,29 @@ export interface PowerZoneInfo {
 
 export interface PowerZoneThreshold extends PowerZoneInfo {
   minWatts: number;
+  jumpWatts: number;
   minPct: number;
   maxWatts: number | null;
 }
 
 /**
- * Returns the 6 Coggan power zones with exact minimum/maximum watt thresholds for the given FTP.
+ * Returns the 6 Coggan power zones with exact minimum/maximum watt thresholds
+ * and ERG jump targets (minWatts + 10W, clamped within the zone) for the given FTP.
  */
 export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
   const safeFtp = Math.max(1, ftp);
   const z1Min = Math.max(40, Math.round(safeFtp * 0.40));
-  const z2Min = Math.round(safeFtp * 0.55);
-  const z3Min = Math.round(safeFtp * 0.76);
-  const z4Min = Math.round(safeFtp * 0.91);
-  const z5Min = Math.round(safeFtp * 1.06);
-  const z6Min = Math.round(safeFtp * 1.21);
+  const z2Min = Math.ceil((safeFtp * 55) / 100);
+  const z3Min = Math.ceil((safeFtp * 76) / 100);
+  const z4Min = Math.ceil((safeFtp * 91) / 100);
+  const z5Min = Math.ceil((safeFtp * 106) / 100);
+  const z6Min = Math.ceil((safeFtp * 121) / 100);
+
+  const z1Max = Math.max(z1Min, z2Min - 1);
+  const z2Max = Math.max(z2Min, z3Min - 1);
+  const z3Max = Math.max(z3Min, z4Min - 1);
+  const z4Max = Math.max(z4Min, z5Min - 1);
+  const z5Max = Math.max(z5Min, z6Min - 1);
 
   return [
     {
@@ -32,8 +40,9 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'Recuperación',
       color: '#64748b',
       minWatts: z1Min,
+      jumpWatts: Math.min(z1Max, z1Min + 10),
       minPct: 40,
-      maxWatts: Math.max(z1Min, z2Min - 1),
+      maxWatts: z1Max,
     },
     {
       zone: 2,
@@ -41,8 +50,9 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'Resistencia',
       color: '#3b82f6',
       minWatts: z2Min,
+      jumpWatts: Math.min(z2Max, z2Min + 10),
       minPct: 55,
-      maxWatts: z3Min - 1,
+      maxWatts: z2Max,
     },
     {
       zone: 3,
@@ -50,8 +60,9 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'Tempo / Sweet Spot',
       color: '#10b981',
       minWatts: z3Min,
+      jumpWatts: Math.min(z3Max, z3Min + 10),
       minPct: 76,
-      maxWatts: z4Min - 1,
+      maxWatts: z3Max,
     },
     {
       zone: 4,
@@ -59,8 +70,9 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'Umbral (FTP)',
       color: '#eab308',
       minWatts: z4Min,
+      jumpWatts: Math.min(z4Max, z4Min + 10),
       minPct: 91,
-      maxWatts: z5Min - 1,
+      maxWatts: z4Max,
     },
     {
       zone: 5,
@@ -68,8 +80,9 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'VO2max',
       color: '#f97316',
       minWatts: z5Min,
+      jumpWatts: Math.min(z5Max, z5Min + 10),
       minPct: 106,
-      maxWatts: z6Min - 1,
+      maxWatts: z5Max,
     },
     {
       zone: 6,
@@ -77,6 +90,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
       name: 'Anaeróbico',
       color: '#ef4444',
       minWatts: z6Min,
+      jumpWatts: z6Min + 10,
       minPct: 121,
       maxWatts: null,
     },
@@ -84,23 +98,25 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
 }
 
 /**
- * Jumps from currentWatts to the minimum watts of the next Coggan zone.
- * If already in Z6+, returns Z6 minimum watts (or keeps current if above Z6 min).
+ * Jumps from currentWatts to the ERG jump target (minWatts + 10W) of the next Coggan zone.
+ * If already in Z6+, returns Z6 jumpWatts.
  */
 export function getNextZoneMinWatts(currentWatts: number, ftp: number): number {
-  const zones = getPowerZoneThresholds(ftp);
+  const thresholds = getPowerZoneThresholds(ftp);
   const z = getPowerZone(currentWatts, ftp).zone;
-  return zones[Math.min(zones.length - 1, z)].minWatts;
+  const targetZone = Math.min(6, z + 1);
+  return thresholds[targetZone - 1].jumpWatts;
 }
 
 /**
- * Jumps from currentWatts to the minimum watts of the previous Coggan zone.
- * If already in Z1, returns Z1 minimum watts.
+ * Jumps from currentWatts to the ERG jump target (minWatts + 10W) of the previous Coggan zone.
+ * If already in Z1, returns Z1 jumpWatts.
  */
 export function getPrevZoneMinWatts(currentWatts: number, ftp: number): number {
-  const zones = getPowerZoneThresholds(ftp);
+  const thresholds = getPowerZoneThresholds(ftp);
   const z = getPowerZone(currentWatts, ftp).zone;
-  return zones[Math.max(0, z - 2)].minWatts;
+  const targetZone = Math.max(1, z - 1);
+  return thresholds[targetZone - 1].jumpWatts;
 }
 
 /**
