@@ -847,7 +847,7 @@ export const App: React.FC = () => {
         )}
         <img
           src="./favicon.png"
-          alt="RuLo ERG"
+          alt="RuLo"
           style={{ width: 38, height: 38, borderRadius: 9, display: 'block', cursor: 'pointer' }}
           onClick={() => setCurrentView('home')}
         />
@@ -856,7 +856,7 @@ export const App: React.FC = () => {
           style={{ cursor: 'pointer' }}
           onClick={() => setCurrentView('home')}
         >
-          RULO ERG
+          RuLo
         </div>
       </div>
 
@@ -1052,10 +1052,10 @@ export const App: React.FC = () => {
           <div className="brand-section">
             <img
               src="./favicon.png"
-              alt="RuLo ERG"
+              alt="RuLo"
               style={{ width: 38, height: 38, borderRadius: 9, display: 'block' }}
             />
-            <div className="brand-title">RULO ERG</div>
+            <div className="brand-title">RuLo</div>
           </div>
           <div className="ftp-badge-pill">
             <span style={{ color: 'var(--text-muted)' }}>FTP:</span>
