@@ -380,100 +380,101 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       const deltaSec = (now - last) / 1000;
       lastWallTimeRef.current = now;
 
-      setElapsedSec((prevElapsed) => {
-        const nextElapsed = prevElapsed + deltaSec;
-        const currentSec = Math.floor(nextElapsed);
+      const nextElapsed = elapsedSecRef.current + deltaSec;
+      const currentSec = Math.floor(nextElapsed);
 
-        // Compute snapshot for this second
-        const currentSnapshot = getWorkoutSnapshotAtSecond(
-          workout,
-          currentSec,
-          ftp,
-          biasWattsRef.current
-        );
+      // Compute snapshot for this second
+      const currentSnapshot = getWorkoutSnapshotAtSecond(
+        workout,
+        currentSec,
+        ftp,
+        biasWattsRef.current
+      );
 
-        // Sound cue: Countdown beeps at 3, 2, 1 seconds left in current block
-        if (
-          soundEnabled &&
-          currentSnapshot.blockRemainingSec <= 3 &&
-          currentSnapshot.blockRemainingSec >= 1 &&
-          lastBeepSecRef.current !== currentSnapshot.blockRemainingSec
-        ) {
-          lastBeepSecRef.current = currentSnapshot.blockRemainingSec;
-          playCountdownBeep(currentSnapshot.blockRemainingSec);
+      // Sound cue: Countdown beeps at 3, 2, 1 seconds left in current block
+      if (
+        soundEnabled &&
+        currentSnapshot.blockRemainingSec <= 3 &&
+        currentSnapshot.blockRemainingSec >= 1 &&
+        lastBeepSecRef.current !== currentSnapshot.blockRemainingSec
+      ) {
+        lastBeepSecRef.current = currentSnapshot.blockRemainingSec;
+        playCountdownBeep(currentSnapshot.blockRemainingSec);
+      }
+
+      // Sound cue: Block change tone
+      if (
+        lastBlockIndexRef.current !== -1 &&
+        currentSnapshot.blockIndex !== lastBlockIndexRef.current &&
+        !currentSnapshot.finished
+      ) {
+        const prevTarget = lastSentTargetWattsRef.current || ftp;
+        const isHarder = currentSnapshot.targetWatts >= prevTarget;
+        if (soundEnabled) {
+          playBlockChangeTone(isHarder);
+        }
+      }
+      lastBlockIndexRef.current = currentSnapshot.blockIndex;
+
+      // Sound cue & completion when workout reaches total duration
+      if (currentSnapshot.finished || nextElapsed >= totalDurationSec) {
+        elapsedSecRef.current = totalDurationSec;
+        setElapsedSec(totalDurationSec);
+        setIsPlaying(false);
+        setIsFinished(true);
+        if (soundEnabled) {
+          playWorkoutCompleteFanfare();
+        }
+        return;
+      }
+
+      elapsedSecRef.current = nextElapsed;
+      setElapsedSec(nextElapsed);
+
+      // Append recorded telemetry sample strictly once per integer second (1 Hz for Strava/Garmin TCX & FIT)
+      if (currentSec !== lastRecordedSecRef.current) {
+        lastRecordedSecRef.current = currentSec;
+        const curTelem = telemetryRef.current;
+        const acc = secondAccumulatorRef.current;
+
+        // Power: mean of packets in this second if any, else current power
+        const recPower = acc.n > 0 ? Math.round(acc.sumW / acc.n) : (curTelem.powerWatts || 0);
+
+        // Cadence: mean ignoring zeros if any was > 0, else 0 if had packets, else curTelem
+        let recCadence: number;
+        if (acc.nCad > 0) {
+          recCadence = Math.round(acc.sumCad / acc.nCad);
+        } else if (acc.n > 0) {
+          recCadence = 0;
+        } else {
+          recCadence = curTelem.cadenceRpm || 0;
         }
 
-        // Sound cue: Block change tone
-        if (
-          lastBlockIndexRef.current !== -1 &&
-          currentSnapshot.blockIndex !== lastBlockIndexRef.current &&
-          !currentSnapshot.finished
-        ) {
-          const prevTarget = lastSentTargetWattsRef.current || ftp;
-          const isHarder = currentSnapshot.targetWatts >= prevTarget;
-          if (soundEnabled) {
-            playBlockChangeTone(isHarder);
-          }
-        }
-        lastBlockIndexRef.current = currentSnapshot.blockIndex;
-
-        // Sound cue & completion when workout reaches total duration
-        if (currentSnapshot.finished || nextElapsed >= totalDurationSec) {
-          setIsPlaying(false);
-          setIsFinished(true);
-          if (soundEnabled) {
-            playWorkoutCompleteFanfare();
-          }
-          return totalDurationSec;
+        // Heart Rate: mean of values > 0, if none then curTelem.heartRateBpm or undefined
+        let recHr: number | undefined;
+        if (acc.nHr > 0) {
+          recHr = Math.round(acc.sumHr / acc.nHr);
+        } else {
+          recHr = curTelem.heartRateBpm && curTelem.heartRateBpm > 0 ? curTelem.heartRateBpm : undefined;
         }
 
-        // Append recorded telemetry sample strictly once per integer second (1 Hz for Strava/Garmin TCX & FIT)
-        if (currentSec !== lastRecordedSecRef.current) {
-          lastRecordedSecRef.current = currentSec;
-          const curTelem = telemetryRef.current;
-          const acc = secondAccumulatorRef.current;
+        // Reset accumulator for the next second
+        secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
 
-          // Power: mean of packets in this second if any, else current power
-          const recPower = acc.n > 0 ? Math.round(acc.sumW / acc.n) : (curTelem.powerWatts || 0);
-
-          // Cadence: mean ignoring zeros if any was > 0, else 0 if had packets, else curTelem
-          let recCadence: number;
-          if (acc.nCad > 0) {
-            recCadence = Math.round(acc.sumCad / acc.nCad);
-          } else if (acc.n > 0) {
-            recCadence = 0;
-          } else {
-            recCadence = curTelem.cadenceRpm || 0;
-          }
-
-          // Heart Rate: mean of values > 0, if none then curTelem.heartRateBpm or undefined
-          let recHr: number | undefined;
-          if (acc.nHr > 0) {
-            recHr = Math.round(acc.sumHr / acc.nHr);
-          } else {
-            recHr = curTelem.heartRateBpm && curTelem.heartRateBpm > 0 ? curTelem.heartRateBpm : undefined;
-          }
-
-          // Reset accumulator for the next second
-          secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
-
-          setRecordedSamples((prevSamples) => [
-            ...prevSamples,
-            {
-              timestampMs: now,
-              elapsedSec: currentSec,
-              powerWatts: recPower,
-              targetWatts: currentSnapshot.targetWatts,
-              cadenceRpm: recCadence,
-              speedKmh: curTelem.speedKmh || 0,
-              distanceMeters: curTelem.distanceMeters || 0,
-              heartRateBpm: recHr,
-            },
-          ]);
-        }
-
-        return nextElapsed;
-      });
+        setRecordedSamples((prevSamples) => [
+          ...prevSamples,
+          {
+            timestampMs: now,
+            elapsedSec: currentSec,
+            powerWatts: recPower,
+            targetWatts: currentSnapshot.targetWatts,
+            cadenceRpm: recCadence,
+            speedKmh: curTelem.speedKmh || 0,
+            distanceMeters: curTelem.distanceMeters || 0,
+            heartRateBpm: recHr,
+          },
+        ]);
+      }
     }, 250);
 
     return () => clearInterval(interval);
