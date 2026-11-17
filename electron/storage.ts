@@ -44,6 +44,7 @@ export interface UserSettings {
   lastAntHrDeviceId?: number;
   sessionFieldModes?: Record<string, SessionFieldMode>;
   powerSmoothingSec?: 0 | 3 | 5;
+  autoUploadGarmin?: boolean;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   soundEnabled: true,
   preferredTransport: 'ant',
   powerSmoothingSec: 3,
+  autoUploadGarmin: false,
 };
 
 const DEFAULT_WORKOUTS: Workout[] = [

@@ -10,6 +10,14 @@ import {
   type UserSettings,
 } from './storage';
 import * as antManager from './antManager';
+import {
+  garminGetStatus,
+  garminLogin,
+  garminLogout,
+  garminUploadActivity,
+  openExternalGarminUrl,
+  type GarminUploadOptions,
+} from './garminConnect';
 
 // Append Chromium feature switches before app is ready for Web Bluetooth support
 app.commandLine.appendSwitch('enable-experimental-web-platform-features');
@@ -166,6 +174,32 @@ ipcMain.handle('ant:connect-hr', async (_event, hrDeviceId?: number) => {
 
 ipcMain.handle('ant:disconnect-hr', async () => {
   return antManager.disconnectHr();
+});
+
+// -----------------------------------------------------------------------------
+// IPC Routes: Direct Garmin Connect Integration
+// -----------------------------------------------------------------------------
+ipcMain.handle('garmin:get-status', async () => {
+  return garminGetStatus();
+});
+
+ipcMain.handle('garmin:login', async () => {
+  return garminLogin(mainWindow);
+});
+
+ipcMain.handle('garmin:logout', async () => {
+  return garminLogout();
+});
+
+ipcMain.handle(
+  'garmin:upload-activity',
+  async (_event, options: GarminUploadOptions) => {
+    return garminUploadActivity(options);
+  }
+);
+
+ipcMain.handle('garmin:open-external-url', async (_event, url: string) => {
+  return openExternalGarminUrl(url);
 });
 
 // Bluetooth device selection from renderer UI

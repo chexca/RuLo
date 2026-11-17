@@ -20,6 +20,9 @@ import {
   User,
   Heart,
   X,
+  CheckCircle2,
+  Link2,
+  Loader2,
 } from 'lucide-react';
 import {
   Workout,
@@ -31,6 +34,7 @@ import {
   TrainerTelemetry,
   TrainerStateEvent,
   HrSensorStateEvent,
+  GarminStatus,
 } from './types/workout';
 import { computeWorkoutStats, formatTime } from './utils/workoutMath';
 import { parseWorkoutFileContent } from './utils/workoutImporter';
@@ -148,6 +152,11 @@ export const App: React.FC = () => {
   const [hrErrorMessage, setHrErrorMessage] = useState<string | undefined>();
   const liveAntHrRef = useRef<number | undefined>(undefined);
 
+  // Garmin Connect session state
+  const [garminStatus, setGarminStatus] = useState<GarminStatus>({ connected: false });
+  const [garminAuthBusy, setGarminAuthBusy] = useState(false);
+  const [garminAuthError, setGarminAuthError] = useState<string | null>(null);
+
   // Telemetry stream from rodillo
   const [telemetry, setTelemetry] = useState<TrainerTelemetry>({
     timestamp: Date.now(),
@@ -209,6 +218,65 @@ export const App: React.FC = () => {
     };
 
     initData();
+  }, []);
+
+  // Initialize Garmin Connect connection status on mount
+  useEffect(() => {
+    const initGarmin = async () => {
+      if (!window.electronAPI?.garminGetStatus) return;
+      try {
+        const status = await window.electronAPI.garminGetStatus();
+        if (status) {
+          setGarminStatus(status);
+        }
+      } catch (e) {
+        console.warn('Error checking Garmin Connect status', e);
+      }
+    };
+    initGarmin();
+  }, []);
+
+  const handleGarminLogin = useCallback(async () => {
+    if (!window.electronAPI?.garminLogin) {
+      return {
+        ok: false,
+        connected: false,
+        error: 'Garmin Connect solo está disponible en la app de escritorio.',
+      };
+    }
+    setGarminAuthBusy(true);
+    setGarminAuthError(null);
+    try {
+      const res = await window.electronAPI.garminLogin();
+      setGarminStatus({
+        connected: res.connected,
+        displayName: res.displayName,
+        lastVerifiedAt: res.connected ? new Date().toISOString() : undefined,
+      });
+      if (!res.ok && res.error) {
+        setGarminAuthError(res.error);
+      }
+      return res;
+    } catch (err) {
+      const msg = (err as Error).message || 'Error al conectar con Garmin Connect';
+      setGarminAuthError(msg);
+      return { ok: false, connected: false, error: msg };
+    } finally {
+      setGarminAuthBusy(false);
+    }
+  }, []);
+
+  const handleGarminLogout = useCallback(async () => {
+    setGarminAuthBusy(true);
+    setGarminAuthError(null);
+    try {
+      if (window.electronAPI?.garminLogout) {
+        await window.electronAPI.garminLogout();
+      }
+      setGarminStatus({ connected: false });
+    } finally {
+      setGarminAuthBusy(false);
+    }
   }, []);
 
   // Save workouts when changed
@@ -557,6 +625,9 @@ export const App: React.FC = () => {
           deviceName={deviceName}
           onOpenConnectionModal={() => setIsConnModalOpen(true)}
           sendTargetPowerToActiveTrainer={sendTargetPowerToActiveTrainer}
+          garminStatus={garminStatus}
+          autoUploadGarmin={Boolean(settings.autoUploadGarmin)}
+          onGarminLogin={handleGarminLogin}
         />
         <ConnectionModal
           isOpen={isConnModalOpen}
@@ -1027,6 +1098,71 @@ export const App: React.FC = () => {
                     <option value={5}>Media 5s (Estable)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Garmin Connect Integration Section */}
+              <div className="garmin-profile-section">
+                <div className="garmin-profile-header">
+                  <div>
+                    <div className="garmin-profile-title">
+                      <Link2 size={16} style={{ color: 'var(--accent-cyan)' }} />
+                      <span>Garmin Connect</span>
+                    </div>
+                    <div className="garmin-profile-status">
+                      {garminStatus.connected ? (
+                        <span className="garmin-status-connected">
+                          <CheckCircle2 size={14} /> Conectado como{' '}
+                          <strong>{garminStatus.displayName || 'Usuario Garmin'}</strong>
+                        </span>
+                      ) : (
+                        <span className="garmin-status-disconnected">No vinculado</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {garminStatus.connected ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={{ padding: '7px 12px', fontSize: '0.82rem' }}
+                      disabled={garminAuthBusy}
+                      onClick={handleGarminLogout}
+                    >
+                      {garminAuthBusy ? <Loader2 size={14} className="spin" /> : 'Desvincular'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '7px 14px', fontSize: '0.82rem' }}
+                      disabled={garminAuthBusy}
+                      onClick={handleGarminLogin}
+                    >
+                      {garminAuthBusy ? (
+                        <>
+                          <Loader2 size={14} className="spin" /> Conectando...
+                        </>
+                      ) : (
+                        'Vincular Garmin Connect'
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {garminAuthError && (
+                  <div className="garmin-profile-error">{garminAuthError}</div>
+                )}
+
+                <label className="garmin-auto-upload-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.autoUploadGarmin)}
+                    onChange={(e) =>
+                      handleUpdateSettings({ autoUploadGarmin: e.target.checked })
+                    }
+                  />
+                  <span>Subir automáticamente a Garmin Connect al completar sesión</span>
+                </label>
               </div>
             </div>
 

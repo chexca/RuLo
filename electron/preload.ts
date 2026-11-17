@@ -6,6 +6,12 @@ import type {
   TrainerTelemetry,
   HrSensorStateEvent,
 } from './antManager';
+import type {
+  GarminStatus,
+  GarminLoginResult,
+  GarminUploadOptions,
+  GarminUploadResult,
+} from './garminConnect';
 
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
@@ -40,6 +46,13 @@ export interface ElectronAPI {
     cb: (devices: { deviceId: string; deviceName: string }[]) => void
   ) => () => void;
   selectBluetoothDevice: (deviceId: string) => void;
+
+  // Direct Garmin Connect integration (Main process persistent session)
+  garminGetStatus: () => Promise<GarminStatus>;
+  garminLogin: () => Promise<GarminLoginResult>;
+  garminLogout: () => Promise<void>;
+  garminUploadActivity: (options: GarminUploadOptions) => Promise<GarminUploadResult>;
+  openExternalUrl: (url: string) => Promise<void>;
 }
 
 const api: ElectronAPI = {
@@ -115,6 +128,15 @@ const api: ElectronAPI = {
   selectBluetoothDevice: (deviceId: string) => {
     ipcRenderer.send('user-selected-bluetooth-device', deviceId);
   },
+
+  // Direct Garmin Connect integration
+  garminGetStatus: () => ipcRenderer.invoke('garmin:get-status'),
+  garminLogin: () => ipcRenderer.invoke('garmin:login'),
+  garminLogout: () => ipcRenderer.invoke('garmin:logout'),
+  garminUploadActivity: (options: GarminUploadOptions) =>
+    ipcRenderer.invoke('garmin:upload-activity', options),
+  openExternalUrl: (url: string) =>
+    ipcRenderer.invoke('garmin:open-external-url', url),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

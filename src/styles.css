@@ -991,3 +991,116 @@ body {
   margin-left: 6px;
   line-height: 1;
 }
+
+/* Garmin Connect Integration */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.spin {
+  animation: rulo-spin 1s linear infinite;
+}
+
+@keyframes rulo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.alert-cyan {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #bae6fd;
+}
+
+.garmin-profile-section {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--border-subtle);
+}
+
+.garmin-profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.garmin-profile-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-main);
+}
+
+.garmin-profile-status {
+  margin-top: 4px;
+  font-size: 0.8rem;
+}
+
+.garmin-status-connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #34d399;
+}
+
+.garmin-status-disconnected {
+  color: var(--text-dim);
+}
+
+.garmin-profile-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.garmin-auto-upload-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.garmin-auto-upload-toggle input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.garmin-upload-banner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.garmin-success-badge {
+  font-weight: 700;
+}
+
+.garmin-external-btn {
+  align-self: flex-start;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
