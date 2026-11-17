@@ -1104,3 +1104,307 @@ body {
   padding: 6px 12px;
   font-size: 0.82rem;
 }
+
+/* Main Menu ('home') */
+.home-hero-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 1040px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+.home-hero-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.home-hero-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.home-hero-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 580px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.home-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 24px;
+  width: 100%;
+}
+
+@media (max-width: 780px) {
+  .home-menu-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-menu-card {
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  min-height: 290px;
+  cursor: pointer;
+  background: linear-gradient(160deg, rgba(22, 32, 51, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid #24324a;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.home-menu-card-freeride:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-emerald);
+  box-shadow: 0 18px 42px rgba(16, 185, 129, 0.16);
+}
+
+.home-menu-card-library:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 18px 42px rgba(56, 189, 248, 0.16);
+}
+
+.home-card-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.home-card-icon-emerald {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--accent-emerald);
+}
+
+.home-card-icon-cyan {
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--accent-cyan);
+}
+
+.home-card-title {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 10px;
+  letter-spacing: -0.02em;
+}
+
+.home-card-desc {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.home-card-cta {
+  width: 100%;
+  justify-content: center;
+  font-weight: 700;
+}
+
+/* Free Ride ('Solo Rodar') Controls */
+.freeride-control-panel {
+  margin: 16px 24px 0;
+  padding: 14px 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.freeride-mode-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.freeride-mode-switch {
+  display: inline-flex;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 4px;
+}
+
+.freeride-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.freeride-mode-btn:hover {
+  color: #ffffff;
+}
+
+.freeride-mode-btn.is-active-erg {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+
+.freeride-mode-btn.is-active-free {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+}
+
+.freeride-erg-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.freeride-target-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius-md);
+  padding: 5px 12px;
+}
+
+.freeride-target-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.freeride-target-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.freeride-watts-input {
+  width: 68px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--accent-cyan);
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.freeride-watts-input:focus {
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.freeride-target-meta {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.freeride-step-buttons,
+.freeride-zone-step-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.freeride-zone-pills-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .freeride-zone-pills-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.freeride-zone-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #1e293b;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.freeride-zone-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.12);
+}
+
+.freeride-zone-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.freeride-free-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.freeride-resistance-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.freeride-slider {
+  flex: 1;
+  min-width: 160px;
+  accent-color: var(--accent-emerald);
+  cursor: pointer;
+}
+
+.freeride-free-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}

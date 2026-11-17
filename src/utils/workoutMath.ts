@@ -7,6 +7,102 @@ export interface PowerZoneInfo {
   color: string;
 }
 
+export interface PowerZoneThreshold extends PowerZoneInfo {
+  minWatts: number;
+  minPct: number;
+  maxWatts: number | null;
+}
+
+/**
+ * Returns the 6 Coggan power zones with exact minimum/maximum watt thresholds for the given FTP.
+ */
+export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
+  const safeFtp = Math.max(1, ftp);
+  const z1Min = Math.max(40, Math.round(safeFtp * 0.40));
+  const z2Min = Math.round(safeFtp * 0.55);
+  const z3Min = Math.round(safeFtp * 0.76);
+  const z4Min = Math.round(safeFtp * 0.91);
+  const z5Min = Math.round(safeFtp * 1.06);
+  const z6Min = Math.round(safeFtp * 1.21);
+
+  return [
+    {
+      zone: 1,
+      code: 'Z1',
+      name: 'Recuperación',
+      color: '#64748b',
+      minWatts: z1Min,
+      minPct: 40,
+      maxWatts: Math.max(z1Min, z2Min - 1),
+    },
+    {
+      zone: 2,
+      code: 'Z2',
+      name: 'Resistencia',
+      color: '#3b82f6',
+      minWatts: z2Min,
+      minPct: 55,
+      maxWatts: z3Min - 1,
+    },
+    {
+      zone: 3,
+      code: 'Z3',
+      name: 'Tempo / Sweet Spot',
+      color: '#10b981',
+      minWatts: z3Min,
+      minPct: 76,
+      maxWatts: z4Min - 1,
+    },
+    {
+      zone: 4,
+      code: 'Z4',
+      name: 'Umbral (FTP)',
+      color: '#eab308',
+      minWatts: z4Min,
+      minPct: 91,
+      maxWatts: z5Min - 1,
+    },
+    {
+      zone: 5,
+      code: 'Z5',
+      name: 'VO2max',
+      color: '#f97316',
+      minWatts: z5Min,
+      minPct: 106,
+      maxWatts: z6Min - 1,
+    },
+    {
+      zone: 6,
+      code: 'Z6',
+      name: 'Anaeróbico',
+      color: '#ef4444',
+      minWatts: z6Min,
+      minPct: 121,
+      maxWatts: null,
+    },
+  ];
+}
+
+/**
+ * Jumps from currentWatts to the minimum watts of the next Coggan zone.
+ * If already in Z6+, returns Z6 minimum watts (or keeps current if above Z6 min).
+ */
+export function getNextZoneMinWatts(currentWatts: number, ftp: number): number {
+  const zones = getPowerZoneThresholds(ftp);
+  const z = getPowerZone(currentWatts, ftp).zone;
+  return zones[Math.min(zones.length - 1, z)].minWatts;
+}
+
+/**
+ * Jumps from currentWatts to the minimum watts of the previous Coggan zone.
+ * If already in Z1, returns Z1 minimum watts.
+ */
+export function getPrevZoneMinWatts(currentWatts: number, ftp: number): number {
+  const zones = getPowerZoneThresholds(ftp);
+  const z = getPowerZone(currentWatts, ftp).zone;
+  return zones[Math.max(0, z - 2)].minWatts;
+}
+
 /**
  * Resolves a power value (either absolute Watts or percentage of FTP) into integer Watts.
  */

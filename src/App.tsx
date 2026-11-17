@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   Link2,
   Loader2,
+  ArrowLeft,
+  Wind,
 } from 'lucide-react';
 import {
   Workout,
@@ -44,6 +46,7 @@ import { WorkoutChart } from './components/WorkoutChart';
 import { ConnectionModal } from './components/ConnectionModal';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutRidePlayer } from './components/WorkoutRidePlayer';
+import { FreeRidePlayer } from './components/FreeRidePlayer';
 import { NumericInput } from './components/NumericInput';
 
 // Seeded default workouts if library is empty
@@ -127,8 +130,8 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 export const App: React.FC = () => {
-  // Views: 'library' | 'builder' | 'player'
-  const [currentView, setCurrentView] = useState<'library' | 'builder' | 'player'>('library');
+  // Views: 'home' | 'library' | 'builder' | 'player' | 'free_ride'
+  const [currentView, setCurrentView] = useState<'home' | 'library' | 'builder' | 'player' | 'free_ride'>('home');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -599,6 +602,382 @@ export const App: React.FC = () => {
     e.target.value = '';
   };
 
+  const connectionModalElement = (
+    <ConnectionModal
+      isOpen={isConnModalOpen}
+      onClose={() => setIsConnModalOpen(false)}
+      activeTransport={activeTransport}
+      connectionStatus={connectionStatus}
+      deviceName={deviceName}
+      stickName={stickName}
+      errorMessage={errorMessage}
+      discoveredAntDevices={discoveredAntDevices}
+      discoveredBleDevices={discoveredBleDevices}
+      onStartAntScan={handleStartAntScan}
+      onConnectAntDevice={handleConnectAntDevice}
+      onConnectBle={handleConnectBle}
+      onSelectBleDevice={handleSelectBleDevice}
+      onConnectSimulator={handleConnectSimulator}
+      onDisconnect={handleDisconnectActiveTrainer}
+      hrStatus={hrStatus}
+      hrDeviceName={hrDeviceName}
+      hrDeviceId={hrDeviceId}
+      hrBpm={hrBpm}
+      hrBatteryStatus={hrBatteryStatus}
+      hrErrorMessage={hrErrorMessage}
+      onConnectAntHr={handleConnectAntHr}
+      onDisconnectAntHr={handleDisconnectAntHr}
+    />
+  );
+
+  const profileModalElement = isProfileModalOpen && (
+    <div className="modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '520px' }}
+      >
+        <div className="modal-header">
+          <div className="modal-title">
+            <User size={22} style={{ color: 'var(--accent-cyan)' }} />
+            <span>Perfil de Ciclista y Fisiología</span>
+          </div>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setIsProfileModalOpen(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div
+            style={{
+              background: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.2)',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              marginBottom: '18px',
+              fontSize: '0.82rem',
+              color: '#bae6fd',
+              lineHeight: 1.45,
+            }}
+          >
+            💡 <strong>Cálculo Científico:</strong> El peso y tu frecuencia cardíaca se emplean para determinar de forma exacta las <strong>kilocalorías quemadas</strong> (eficiencia bruta mecánica del 23.9% + gasto basal Keytel) y las <strong>5 Zonas de Pulso Karvonen</strong> según tu Frecuencia Cardíaca de Reserva.
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div>
+              <label className="form-label">Peso Corporal (kg)</label>
+              <NumericInput
+                min={1}
+                allowDecimal
+                fallback={70}
+                className="input-number"
+                value={settings.weightKg}
+                onChange={(val) => handleUpdateSettings({ weightKg: val })}
+              />
+              <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: 4 }}>
+                Relación: {(settings.ftp / Math.max(30, settings.weightKg)).toFixed(2)} W/kg
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">Potencia Umbral (FTP W)</label>
+              <NumericInput
+                min={1}
+                fallback={200}
+                className="input-number"
+                value={settings.ftp}
+                onChange={(val) => handleUpdateSettings({ ftp: val })}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div>
+              <label className="form-label">FC Máxima (ppm)</label>
+              <NumericInput
+                min={1}
+                fallback={190}
+                className="input-number"
+                value={settings.maxHr}
+                onChange={(val) => handleUpdateSettings({ maxHr: val })}
+              />
+            </div>
+
+            <div>
+              <label className="form-label">FC en Reposo (ppm)</label>
+              <NumericInput
+                min={1}
+                fallback={55}
+                className="input-number"
+                value={settings.restingHr}
+                onChange={(val) => handleUpdateSettings({ restingHr: val })}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4 }}>
+                Para fórmula Karvonen (FC Reserva)
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label className="form-label">Edad (años)</label>
+              <NumericInput
+                min={1}
+                allowEmpty
+                placeholder="35"
+                fallback={35}
+                className="input-number"
+                value={settings.age}
+                onChangeOptional={(val) => handleUpdateSettings({ age: val })}
+              />
+            </div>
+
+            <div>
+              <label className="form-label">Suavizado de Potencia</label>
+              <select
+                className="select-input"
+                value={settings.powerSmoothingSec ?? 3}
+                onChange={(e) =>
+                  handleUpdateSettings({
+                    powerSmoothingSec: (parseInt(e.target.value) || 3) as 0 | 3 | 5,
+                  })
+                }
+              >
+                <option value={0}>Instantánea (0s)</option>
+                <option value={3}>Media 3s (Recomendado)</option>
+                <option value={5}>Media 5s (Estable)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Garmin Connect Integration Section */}
+          <div className="garmin-profile-section">
+            <div className="garmin-profile-header">
+              <div>
+                <div className="garmin-profile-title">
+                  <Link2 size={16} style={{ color: 'var(--accent-cyan)' }} />
+                  <span>Garmin Connect</span>
+                </div>
+                <div className="garmin-profile-status">
+                  {garminStatus.connected ? (
+                    <span className="garmin-status-connected">
+                      <CheckCircle2 size={14} /> Conectado como{' '}
+                      <strong>{garminStatus.displayName || 'Usuario Garmin'}</strong>
+                    </span>
+                  ) : (
+                    <span className="garmin-status-disconnected">No vinculado</span>
+                  )}
+                </div>
+              </div>
+
+              {garminStatus.connected ? (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ padding: '7px 12px', fontSize: '0.82rem' }}
+                  disabled={garminAuthBusy}
+                  onClick={handleGarminLogout}
+                >
+                  {garminAuthBusy ? <Loader2 size={14} className="spin" /> : 'Desvincular'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: '7px 14px', fontSize: '0.82rem' }}
+                  disabled={garminAuthBusy}
+                  onClick={handleGarminLogin}
+                >
+                  {garminAuthBusy ? (
+                    <>
+                      <Loader2 size={14} className="spin" /> Conectando...
+                    </>
+                  ) : (
+                    'Vincular Garmin Connect'
+                  )}
+                </button>
+              )}
+            </div>
+
+            {garminAuthError && (
+              <div className="garmin-profile-error">{garminAuthError}</div>
+            )}
+
+            <label className="garmin-auto-upload-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.autoUploadGarmin)}
+                onChange={(e) =>
+                  handleUpdateSettings({ autoUploadGarmin: e.target.checked })
+                }
+              />
+              <span>Subir automáticamente a Garmin Connect al completar sesión</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button
+            className="btn btn-emerald"
+            onClick={() => setIsProfileModalOpen(false)}
+          >
+            Guardar y Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTopHeader = (showLibraryActions: boolean) => (
+    <header className="app-header">
+      <div className="brand-section">
+        {showLibraryActions && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+            onClick={() => setCurrentView('home')}
+            title="Volver al menú principal"
+          >
+            <ArrowLeft size={16} /> Inicio
+          </button>
+        )}
+        <img
+          src="./favicon.png"
+          alt="RuLo ERG"
+          style={{ width: 38, height: 38, borderRadius: 9, display: 'block', cursor: 'pointer' }}
+          onClick={() => setCurrentView('home')}
+        />
+        <div
+          className="brand-title"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setCurrentView('home')}
+        >
+          RULO ERG
+        </div>
+      </div>
+
+      <div className="header-actions">
+        {/* Quick inline FTP & W/kg Editor */}
+        <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) y relación W/kg">
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>FTP:</span>
+          <NumericInput
+            className="ftp-input"
+            value={settings.ftp}
+            min={1}
+            fallback={200}
+            onChange={(val) => handleUpdateSettings({ ftp: val })}
+          />
+          <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem' }}>W</span>
+          <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, borderLeft: '1px solid #334155', paddingLeft: 6 }}>
+            {(settings.ftp / Math.max(30, settings.weightKg || 72)).toFixed(2)} W/kg
+          </span>
+        </div>
+
+        {/* Cyclist Profile Button */}
+        <button
+          className="btn btn-secondary"
+          onClick={() => setIsProfileModalOpen(true)}
+          title="Ajustar peso, FC Máx, FC Reposo y edad del ciclista"
+          style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+        >
+          <User size={15} /> Perfil Ciclista
+        </button>
+
+        {/* Quick HR Strap Status Pill in Header */}
+        {hrStatus === 'connected' && (
+          <div
+            className="connection-pill"
+            onClick={() => setIsConnModalOpen(true)}
+            title="Pulsómetro ANT+ conectado en Canal 1"
+            style={{ borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' }}
+          >
+            <Heart size={14} fill="#ef4444" color="#ef4444" className="animate-pulse" />
+            <span style={{ color: '#fca5a5', fontWeight: 700, fontSize: '0.85rem' }}>
+              {hrBpm ? `${hrBpm} ppm` : 'Pulsómetro'}
+            </span>
+          </div>
+        )}
+
+        {/* Sound Toggle */}
+        <button
+          className="btn btn-secondary btn-icon"
+          onClick={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
+          title={settings.soundEnabled ? 'Avisos sonoros habilitados' : 'Avisos sonoros silenciados'}
+        >
+          {settings.soundEnabled ? (
+            <Volume2 size={18} style={{ color: 'var(--accent-cyan)' }} />
+          ) : (
+            <VolumeX size={18} style={{ color: 'var(--text-dim)' }} />
+          )}
+        </button>
+
+        {/* Connection Status Button */}
+        <div
+          className="connection-pill"
+          onClick={() => setIsConnModalOpen(true)}
+          title="Abrir panel de conexión del rodillo Tacx Neo 2"
+        >
+          <span
+            className={`status-dot ${
+              connectionStatus === 'connected'
+                ? 'connected'
+                : connectionStatus === 'connecting' || connectionStatus === 'scanning'
+                ? 'connecting'
+                : connectionStatus === 'error'
+                ? 'error'
+                : 'disconnected'
+            }`}
+          />
+          {activeTransport === 'ant' ? (
+            <Radio size={14} style={{ color: 'var(--accent-cyan)' }} />
+          ) : activeTransport === 'ble' ? (
+            <Bluetooth size={14} style={{ color: 'var(--accent-cyan)' }} />
+          ) : activeTransport === 'simulator' ? (
+            <Cpu size={14} style={{ color: 'var(--accent-emerald)' }} />
+          ) : (
+            <Zap size={14} style={{ color: 'var(--text-muted)' }} />
+          )}
+          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+            {connectionStatus === 'connected'
+              ? deviceName || 'Tacx Neo 2'
+              : 'Conectar Rodillo'}
+          </span>
+        </div>
+
+        {showLibraryActions && (
+          <>
+            {/* Import Workout Button */}
+            <label
+              htmlFor="library-import-input"
+              className="btn btn-secondary"
+              style={{ cursor: 'pointer' }}
+              title="Importar archivos .ZWO, .MRC, .ERG o .JSON"
+            >
+              <Upload size={16} /> Importar
+            </label>
+            <input
+              id="library-import-input"
+              type="file"
+              multiple
+              accept=".zwo,.mrc,.erg,.json"
+              style={{ display: 'none' }}
+              onChange={handleImportMultipleFiles}
+            />
+
+            {/* Create Workout Button */}
+            <button className="btn btn-primary" onClick={handleCreateNewWorkout}>
+              <Plus size={16} /> Crear Nueva Sesión
+            </button>
+          </>
+        )}
+      </div>
+    </header>
+  );
+
   // Render view
   if (currentView === 'player' && activeWorkout) {
     return (
@@ -630,31 +1009,38 @@ export const App: React.FC = () => {
           autoUploadGarmin={Boolean(settings.autoUploadGarmin)}
           onGarminLogin={handleGarminLogin}
         />
-        <ConnectionModal
-          isOpen={isConnModalOpen}
-          onClose={() => setIsConnModalOpen(false)}
+        {connectionModalElement}
+      </>
+    );
+  }
+
+  if (currentView === 'free_ride') {
+    return (
+      <>
+        <FreeRidePlayer
+          ftp={settings.ftp}
+          weightKg={settings.weightKg}
+          maxHr={settings.maxHr}
+          restingHr={settings.restingHr}
+          age={settings.age}
+          soundEnabled={settings.soundEnabled}
+          sessionFieldModes={settings.sessionFieldModes}
+          onUpdateSessionFieldModes={(modes) => handleUpdateSettings({ sessionFieldModes: modes })}
+          powerSmoothingSec={settings.powerSmoothingSec ?? 3}
+          onUpdatePowerSmoothing={(sec) => handleUpdateSettings({ powerSmoothingSec: sec })}
+          onToggleSound={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
+          onExit={() => setCurrentView('home')}
+          telemetry={telemetry}
           activeTransport={activeTransport}
           connectionStatus={connectionStatus}
           deviceName={deviceName}
-          stickName={stickName}
-          errorMessage={errorMessage}
-          discoveredAntDevices={discoveredAntDevices}
-          discoveredBleDevices={discoveredBleDevices}
-          onStartAntScan={handleStartAntScan}
-          onConnectAntDevice={handleConnectAntDevice}
-          onConnectBle={handleConnectBle}
-          onSelectBleDevice={handleSelectBleDevice}
-          onConnectSimulator={handleConnectSimulator}
-          onDisconnect={handleDisconnectActiveTrainer}
-          hrStatus={hrStatus}
-          hrDeviceName={hrDeviceName}
-          hrDeviceId={hrDeviceId}
-          hrBpm={hrBpm}
-          hrBatteryStatus={hrBatteryStatus}
-          hrErrorMessage={hrErrorMessage}
-          onConnectAntHr={handleConnectAntHr}
-          onDisconnectAntHr={handleDisconnectAntHr}
+          onOpenConnectionModal={() => setIsConnModalOpen(true)}
+          sendTargetPowerToActiveTrainer={sendTargetPowerToActiveTrainer}
+          garminStatus={garminStatus}
+          autoUploadGarmin={Boolean(settings.autoUploadGarmin)}
+          onGarminLogin={handleGarminLogin}
         />
+        {connectionModalElement}
       </>
     );
   }
@@ -697,132 +1083,87 @@ export const App: React.FC = () => {
     );
   }
 
-  // DEFAULT VIEW: WORKOUT LIBRARY
+  // MAIN MENU VIEW ('home')
+  if (currentView === 'home') {
+    return (
+      <div className="app-container">
+        {renderTopHeader(false)}
+
+        <main className="home-hero-container">
+          <div className="home-hero-header">
+            <h1 className="home-hero-title">¿Cómo quieres entrenar hoy?</h1>
+            <p className="home-hero-subtitle">
+              Elige rodaje libre inmediato en directo o selecciona una sesión estructurada por bloques.
+            </p>
+          </div>
+
+          <div className="home-menu-grid">
+            {/* Option 1: Solo Rodar */}
+            <div
+              className="card home-menu-card home-menu-card-freeride"
+              onClick={() => setCurrentView('free_ride')}
+            >
+              <div>
+                <div className="home-card-icon home-card-icon-emerald">
+                  <Wind size={32} />
+                </div>
+                <h2 className="home-card-title">Solo Rodar</h2>
+                <p className="home-card-desc">
+                  Rodaje libre inmediato con o sin modo ERG. Fija vatios al vuelo o salta entre zonas de potencia.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-emerald btn-lg home-card-cta"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentView('free_ride');
+                }}
+              >
+                <Play size={20} fill="currentColor" /> Empezar a Rodar
+              </button>
+            </div>
+
+            {/* Option 2: Mis Workouts */}
+            <div
+              className="card home-menu-card home-menu-card-library"
+              onClick={() => setCurrentView('library')}
+            >
+              <div>
+                <div className="home-card-icon home-card-icon-cyan">
+                  <Layers size={32} />
+                </div>
+                <h2 className="home-card-title">Mis Workouts</h2>
+                <p className="home-card-desc">
+                  Accede a tus {workouts.length} sesiones estructuradas, crea nuevos bloques o importa desde .ZWO/.MRC.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-primary btn-lg home-card-cta"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentView('library');
+                }}
+              >
+                <Activity size={20} /> Abrir Mis Workouts
+              </button>
+            </div>
+          </div>
+        </main>
+
+        {connectionModalElement}
+        {profileModalElement}
+      </div>
+    );
+  }
+
+  // WORKOUT LIBRARY VIEW ('library')
   return (
     <div className="app-container">
-      {/* Top Application Header */}
-      <header className="app-header">
-        <div className="brand-section">
-          <img
-            src="./favicon.png"
-            alt="RuLo ERG"
-            style={{ width: 38, height: 38, borderRadius: 9, display: 'block' }}
-          />
-          <div className="brand-title">RULO ERG</div>
-        </div>
-
-        <div className="header-actions">
-          {/* Quick inline FTP & W/kg Editor */}
-          <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) y relación W/kg">
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>FTP:</span>
-            <NumericInput
-              className="ftp-input"
-              value={settings.ftp}
-              min={1}
-              fallback={200}
-              onChange={(val) => handleUpdateSettings({ ftp: val })}
-            />
-            <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.85rem' }}>W</span>
-            <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, borderLeft: '1px solid #334155', paddingLeft: 6 }}>
-              {(settings.ftp / Math.max(30, settings.weightKg || 72)).toFixed(2)} W/kg
-            </span>
-          </div>
-
-          {/* Cyclist Profile Button */}
-          <button
-            className="btn btn-secondary"
-            onClick={() => setIsProfileModalOpen(true)}
-            title="Ajustar peso, FC Máx, FC Reposo y edad del ciclista"
-            style={{ padding: '6px 12px', fontSize: '0.82rem' }}
-          >
-            <User size={15} /> Perfil Ciclista
-          </button>
-
-          {/* Quick HR Strap Status Pill in Header */}
-          {hrStatus === 'connected' && (
-            <div
-              className="connection-pill"
-              onClick={() => setIsConnModalOpen(true)}
-              title="Pulsómetro ANT+ conectado en Canal 1"
-              style={{ borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' }}
-            >
-              <Heart size={14} fill="#ef4444" color="#ef4444" className="animate-pulse" />
-              <span style={{ color: '#fca5a5', fontWeight: 700, fontSize: '0.85rem' }}>
-                {hrBpm ? `${hrBpm} ppm` : 'Pulsómetro'}
-              </span>
-            </div>
-          )}
-
-          {/* Sound Toggle */}
-          <button
-            className="btn btn-secondary btn-icon"
-            onClick={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
-            title={settings.soundEnabled ? 'Avisos sonoros habilitados' : 'Avisos sonoros silenciados'}
-          >
-            {settings.soundEnabled ? (
-              <Volume2 size={18} style={{ color: 'var(--accent-cyan)' }} />
-            ) : (
-              <VolumeX size={18} style={{ color: 'var(--text-dim)' }} />
-            )}
-          </button>
-
-          {/* Connection Status Button */}
-          <div
-            className="connection-pill"
-            onClick={() => setIsConnModalOpen(true)}
-            title="Abrir panel de conexión del rodillo Tacx Neo 2"
-          >
-            <span
-              className={`status-dot ${
-                connectionStatus === 'connected'
-                  ? 'connected'
-                  : connectionStatus === 'connecting' || connectionStatus === 'scanning'
-                  ? 'connecting'
-                  : connectionStatus === 'error'
-                  ? 'error'
-                  : 'disconnected'
-              }`}
-            />
-            {activeTransport === 'ant' ? (
-              <Radio size={14} style={{ color: 'var(--accent-cyan)' }} />
-            ) : activeTransport === 'ble' ? (
-              <Bluetooth size={14} style={{ color: 'var(--accent-cyan)' }} />
-            ) : activeTransport === 'simulator' ? (
-              <Cpu size={14} style={{ color: 'var(--accent-emerald)' }} />
-            ) : (
-              <Zap size={14} style={{ color: 'var(--text-muted)' }} />
-            )}
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-              {connectionStatus === 'connected'
-                ? deviceName || 'Tacx Neo 2'
-                : 'Conectar Rodillo'}
-            </span>
-          </div>
-
-          {/* Import Workout Button */}
-          <label
-            htmlFor="library-import-input"
-            className="btn btn-secondary"
-            style={{ cursor: 'pointer' }}
-            title="Importar archivos .ZWO, .MRC, .ERG o .JSON"
-          >
-            <Upload size={16} /> Importar
-          </label>
-          <input
-            id="library-import-input"
-            type="file"
-            multiple
-            accept=".zwo,.mrc,.erg,.json"
-            style={{ display: 'none' }}
-            onChange={handleImportMultipleFiles}
-          />
-
-          {/* Create Workout Button */}
-          <button className="btn btn-primary" onClick={handleCreateNewWorkout}>
-            <Plus size={16} /> Crear Nueva Sesión
-          </button>
-        </div>
-      </header>
+      {renderTopHeader(true)}
 
       {/* Main Library Content */}
       <main className="library-container">
@@ -937,234 +1278,8 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Hardware Connection Modal */}
-      <ConnectionModal
-        isOpen={isConnModalOpen}
-        onClose={() => setIsConnModalOpen(false)}
-        activeTransport={activeTransport}
-        connectionStatus={connectionStatus}
-        deviceName={deviceName}
-        stickName={stickName}
-        errorMessage={errorMessage}
-        discoveredAntDevices={discoveredAntDevices}
-        discoveredBleDevices={discoveredBleDevices}
-        onStartAntScan={handleStartAntScan}
-        onConnectAntDevice={handleConnectAntDevice}
-        onConnectBle={handleConnectBle}
-        onSelectBleDevice={handleSelectBleDevice}
-        onConnectSimulator={handleConnectSimulator}
-        onDisconnect={handleDisconnectActiveTrainer}
-        hrStatus={hrStatus}
-        hrDeviceName={hrDeviceName}
-        hrDeviceId={hrDeviceId}
-        hrBpm={hrBpm}
-        hrBatteryStatus={hrBatteryStatus}
-        hrErrorMessage={hrErrorMessage}
-        onConnectAntHr={handleConnectAntHr}
-        onDisconnectAntHr={handleDisconnectAntHr}
-      />
-
-      {/* CYCLIST PROFILE MODAL */}
-      {isProfileModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
-          <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: '520px' }}
-          >
-            <div className="modal-header">
-              <div className="modal-title">
-                <User size={22} style={{ color: 'var(--accent-cyan)' }} />
-                <span>Perfil de Ciclista y Fisiología</span>
-              </div>
-              <button
-                className="btn btn-ghost btn-icon"
-                onClick={() => setIsProfileModalOpen(false)}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div
-                style={{
-                  background: 'rgba(56, 189, 248, 0.08)',
-                  border: '1px solid rgba(56, 189, 248, 0.2)',
-                  borderRadius: '10px',
-                  padding: '12px 14px',
-                  marginBottom: '18px',
-                  fontSize: '0.82rem',
-                  color: '#bae6fd',
-                  lineHeight: 1.45,
-                }}
-              >
-                💡 <strong>Cálculo Científico:</strong> El peso y tu frecuencia cardíaca se emplean para determinar de forma exacta las <strong>kilocalorías quemadas</strong> (eficiencia bruta mecánica del 23.9% + gasto basal Keytel) y las <strong>5 Zonas de Pulso Karvonen</strong> según tu Frecuencia Cardíaca de Reserva.
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                <div>
-                  <label className="form-label">Peso Corporal (kg)</label>
-                  <NumericInput
-                    min={1}
-                    allowDecimal
-                    fallback={70}
-                    className="input-number"
-                    value={settings.weightKg}
-                    onChange={(val) => handleUpdateSettings({ weightKg: val })}
-                  />
-                  <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: 4 }}>
-                    Relación: {(settings.ftp / Math.max(30, settings.weightKg)).toFixed(2)} W/kg
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Potencia Umbral (FTP W)</label>
-                  <NumericInput
-                    min={1}
-                    fallback={200}
-                    className="input-number"
-                    value={settings.ftp}
-                    onChange={(val) => handleUpdateSettings({ ftp: val })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                <div>
-                  <label className="form-label">FC Máxima (ppm)</label>
-                  <NumericInput
-                    min={1}
-                    fallback={190}
-                    className="input-number"
-                    value={settings.maxHr}
-                    onChange={(val) => handleUpdateSettings({ maxHr: val })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">FC en Reposo (ppm)</label>
-                  <NumericInput
-                    min={1}
-                    fallback={55}
-                    className="input-number"
-                    value={settings.restingHr}
-                    onChange={(val) => handleUpdateSettings({ restingHr: val })}
-                  />
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                    Para fórmula Karvonen (FC Reserva)
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div>
-                  <label className="form-label">Edad (años)</label>
-                  <NumericInput
-                    min={1}
-                    allowEmpty
-                    placeholder="35"
-                    fallback={35}
-                    className="input-number"
-                    value={settings.age}
-                    onChangeOptional={(val) => handleUpdateSettings({ age: val })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Suavizado de Potencia</label>
-                  <select
-                    className="select-input"
-                    value={settings.powerSmoothingSec ?? 3}
-                    onChange={(e) =>
-                      handleUpdateSettings({
-                        powerSmoothingSec: (parseInt(e.target.value) || 3) as 0 | 3 | 5,
-                      })
-                    }
-                  >
-                    <option value={0}>Instantánea (0s)</option>
-                    <option value={3}>Media 3s (Recomendado)</option>
-                    <option value={5}>Media 5s (Estable)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Garmin Connect Integration Section */}
-              <div className="garmin-profile-section">
-                <div className="garmin-profile-header">
-                  <div>
-                    <div className="garmin-profile-title">
-                      <Link2 size={16} style={{ color: 'var(--accent-cyan)' }} />
-                      <span>Garmin Connect</span>
-                    </div>
-                    <div className="garmin-profile-status">
-                      {garminStatus.connected ? (
-                        <span className="garmin-status-connected">
-                          <CheckCircle2 size={14} /> Conectado como{' '}
-                          <strong>{garminStatus.displayName || 'Usuario Garmin'}</strong>
-                        </span>
-                      ) : (
-                        <span className="garmin-status-disconnected">No vinculado</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {garminStatus.connected ? (
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      style={{ padding: '7px 12px', fontSize: '0.82rem' }}
-                      disabled={garminAuthBusy}
-                      onClick={handleGarminLogout}
-                    >
-                      {garminAuthBusy ? <Loader2 size={14} className="spin" /> : 'Desvincular'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ padding: '7px 14px', fontSize: '0.82rem' }}
-                      disabled={garminAuthBusy}
-                      onClick={handleGarminLogin}
-                    >
-                      {garminAuthBusy ? (
-                        <>
-                          <Loader2 size={14} className="spin" /> Conectando...
-                        </>
-                      ) : (
-                        'Vincular Garmin Connect'
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {garminAuthError && (
-                  <div className="garmin-profile-error">{garminAuthError}</div>
-                )}
-
-                <label className="garmin-auto-upload-toggle">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.autoUploadGarmin)}
-                    onChange={(e) =>
-                      handleUpdateSettings({ autoUploadGarmin: e.target.checked })
-                    }
-                  />
-                  <span>Subir automáticamente a Garmin Connect al completar sesión</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn btn-emerald"
-                onClick={() => setIsProfileModalOpen(false)}
-              >
-                Guardar y Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {connectionModalElement}
+      {profileModalElement}
     </div>
   );
 };
