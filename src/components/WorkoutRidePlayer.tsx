@@ -43,6 +43,9 @@ import {
   SessionFieldKey,
   GarminStatus,
   GarminUploadResult,
+  StravaStatus,
+  StravaLoginResult,
+  StravaUploadResult,
 } from '../types/workout';
 import {
   getWorkoutSnapshotAtSecond,
@@ -85,6 +88,9 @@ export interface WorkoutRidePlayerProps {
   garminStatus?: GarminStatus;
   autoUploadGarmin?: boolean;
   onGarminLogin?: () => Promise<{ ok: boolean; connected: boolean; displayName?: string; error?: string }>;
+  stravaStatus?: StravaStatus;
+  autoUploadStrava?: boolean;
+  onStravaLogin?: () => Promise<StravaLoginResult>;
 }
 
 export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
@@ -110,6 +116,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   garminStatus,
   autoUploadGarmin = false,
   onGarminLogin,
+  stravaStatus,
+  autoUploadStrava,
+  onStravaLogin,
 }) => {
   const { t } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -123,6 +132,67 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   >('idle');
   const [garminResult, setGarminResult] = useState<GarminUploadResult | undefined>(undefined);
   const autoUploadedGarminRef = useRef(false);
+
+  const [localStravaStatus, setLocalStravaStatus] = useState<StravaStatus>({ connected: false });
+  const [localAutoUploadStrava, setLocalAutoUploadStrava] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('rulo_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.autoUploadStrava === 'boolean') {
+          return parsed.autoUploadStrava;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  });
+  const [stravaUploadState, setStravaUploadState] = useState<
+    'idle' | 'uploading' | 'success' | 'error'
+  >('idle');
+  const [stravaResult, setStravaResult] = useState<StravaUploadResult | undefined>(undefined);
+  const autoUploadedStravaRef = useRef(false);
+
+  const effectiveStravaStatus = stravaStatus ?? localStravaStatus;
+  const effectiveAutoUploadStrava = autoUploadStrava ?? localAutoUploadStrava;
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncStravaState = async () => {
+      try {
+        const raw = localStorage.getItem('rulo_settings');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!cancelled && typeof parsed?.autoUploadStrava === 'boolean') {
+            setLocalAutoUploadStrava(parsed.autoUploadStrava);
+          }
+        } else if (window.electronAPI?.loadData) {
+          const data = await window.electronAPI.loadData();
+          if (!cancelled && typeof data?.settings?.autoUploadStrava === 'boolean') {
+            setLocalAutoUploadStrava(data.settings.autoUploadStrava);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      if (window.electronAPI?.stravaGetStatus) {
+        try {
+          const status = await window.electronAPI.stravaGetStatus();
+          if (!cancelled && status) {
+            setLocalStravaStatus(status);
+          }
+        } catch (e) {
+          console.warn('Error checking Strava status', e);
+        }
+      }
+    };
+    void syncStravaState();
+    return () => {
+      cancelled = true;
+    };
+  }, [isFinished]);
 
   // Field visibility and blur modes
   const [fieldModes, setFieldModes] = useState<Record<string, SessionFieldMode>>(
@@ -508,6 +578,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       setGarminUploadState('idle');
       setGarminResult(undefined);
       autoUploadedGarminRef.current = false;
+      setStravaUploadState('idle');
+      setStravaResult(undefined);
+      autoUploadedStravaRef.current = false;
       lastRecordedSecRef.current = -1;
       secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
       setIsPlaying(true);
@@ -716,6 +789,112 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       void handleUploadToGarmin();
     }
   }, [isFinished, recordedSamples.length, autoUploadGarmin, garminStatus?.connected]);
+
+  const handleUploadToStrava = async (forceRelogin = false) => {
+    setStravaUploadState('uploading');
+    setStravaResult(undefined);
+
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const fileName = `${workout.name.replace(/\s+/g, '_')}_${date}.fit`;
+      const fitBase64 = generateFitBase64(workout.name, recordedSamples);
+      const tcxContent = generateTcx(workout.name, recordedSamples);
+
+      let currentStatus = effectiveStravaStatus;
+      if (!currentStatus?.connected && window.electronAPI?.stravaGetStatus) {
+        try {
+          const fresh = await window.electronAPI.stravaGetStatus();
+          if (fresh) {
+            setLocalStravaStatus(fresh);
+            currentStatus = fresh;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!currentStatus?.connected || forceRelogin) {
+        const loginFn =
+          onStravaLogin ??
+          (window.electronAPI?.stravaLogin
+            ? () => window.electronAPI!.stravaLogin()
+            : undefined);
+
+        if (!loginFn) {
+          setStravaUploadState('error');
+          setStravaResult({
+            ok: false,
+            error: t('player.stravaNoLoginManager'),
+          });
+          return;
+        }
+        const loginRes = await loginFn();
+        if (loginRes) {
+          setLocalStravaStatus({
+            connected: Boolean(loginRes.connected),
+            displayName: loginRes.displayName,
+            lastVerifiedAt: loginRes.connected ? new Date().toISOString() : undefined,
+          });
+        }
+        if (!loginRes.ok || !loginRes.connected) {
+          setStravaUploadState('error');
+          setStravaResult({
+            ok: false,
+            error: loginRes.error || t('player.stravaLoginFailed'),
+          });
+          return;
+        }
+      }
+
+      if (!window.electronAPI?.stravaUploadActivity) {
+        setStravaUploadState('error');
+        setStravaResult({
+          ok: false,
+          error: t('player.stravaDesktopOnly'),
+        });
+        return;
+      }
+
+      const res = await window.electronAPI.stravaUploadActivity({
+        fileName,
+        fitBase64,
+        tcxContent,
+        workoutName: workout.name,
+      });
+
+      if (res.ok) {
+        setStravaUploadState('success');
+        setStravaResult(res);
+      } else {
+        setStravaUploadState('error');
+        setStravaResult(res);
+      }
+    } catch (err) {
+      setStravaUploadState('error');
+      setStravaResult({
+        ok: false,
+        error: (err as Error).message || t('player.stravaUnexpectedError'),
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (
+      isFinished &&
+      recordedSamples.length > 0 &&
+      effectiveAutoUploadStrava &&
+      effectiveStravaStatus?.connected &&
+      !autoUploadedStravaRef.current
+    ) {
+      autoUploadedStravaRef.current = true;
+      void handleUploadToStrava();
+    }
+  }, [
+    isFinished,
+    recordedSamples.length,
+    effectiveAutoUploadStrava,
+    effectiveStravaStatus?.connected,
+  ]);
 
   // Live power delta vs target (using displayWatts for smoothed view)
   const currentWatts = telemetry.powerWatts || 0;
@@ -1727,6 +1906,67 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 </div>
               )}
 
+              {stravaUploadState === 'uploading' && (
+                <div className="alert-box alert-cyan" style={{ marginBottom: 16 }}>
+                  <Loader2 size={18} className="spin" />
+                  <span>{t('player.stravaUploading')}</span>
+                </div>
+              )}
+
+              {stravaUploadState === 'success' && stravaResult && (
+                <div className="alert-box alert-emerald garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle2 size={18} />
+                    <span className="garmin-success-badge">
+                      {stravaResult.duplicate
+                        ? t('player.stravaDuplicate')
+                        : t('player.stravaUploaded')}
+                    </span>
+                  </div>
+                  {stravaResult.activityUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary garmin-external-btn"
+                      onClick={() =>
+                        window.electronAPI?.openExternalStravaUrl?.(stravaResult.activityUrl!)
+                      }
+                    >
+                      {t('player.stravaViewOn')} <ExternalLink size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {stravaUploadState === 'error' && stravaResult && (
+                <div className="alert-box alert-red garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      {stravaResult.needsRelogin
+                        ? stravaResult.error || t('player.stravaSessionExpired')
+                        : stravaResult.error || t('player.stravaUploadError')}
+                    </span>
+                  </div>
+                  {stravaResult.needsRelogin && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{
+                        padding: '7px 12px',
+                        fontSize: '0.82rem',
+                        alignSelf: 'flex-end',
+                        background: '#fc4c02',
+                        borderColor: '#fc4c02',
+                        color: '#fff',
+                      }}
+                      onClick={() => handleUploadToStrava(true)}
+                    >
+                      {t('player.stravaReconnectAndUpload')}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Export Activity Files */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {garminUploadState !== 'success' && (
@@ -1743,6 +1983,30 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     ) : (
                       <>
                         <Upload size={18} /> {t('player.garminUploadBtn')}
+                      </>
+                    )}
+                  </button>
+                )}
+                {stravaUploadState !== 'success' && (
+                  <button
+                    className="btn btn-primary"
+                    style={{
+                      padding: '12px',
+                      fontSize: '0.95rem',
+                      background: '#fc4c02',
+                      borderColor: '#fc4c02',
+                      color: '#fff',
+                    }}
+                    disabled={stravaUploadState === 'uploading'}
+                    onClick={() => handleUploadToStrava(false)}
+                  >
+                    {stravaUploadState === 'uploading' ? (
+                      <>
+                        <Loader2 size={18} className="spin" /> {t('player.stravaUploading')}
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={18} /> {t('player.stravaUploadBtn')}
                       </>
                     )}
                   </button>
