@@ -48,6 +48,7 @@ import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutRidePlayer } from './components/WorkoutRidePlayer';
 import { FreeRidePlayer } from './components/FreeRidePlayer';
 import { NumericInput } from './components/NumericInput';
+import { useI18n, LanguageToggle } from './i18n';
 
 // Seeded default workouts if library is empty
 const SEEDED_WORKOUTS: Workout[] = [
@@ -130,6 +131,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 export const App: React.FC = () => {
+  const { t } = useI18n();
   // Views: 'home' | 'library' | 'builder' | 'player' | 'free_ride'
   const [currentView, setCurrentView] = useState<'home' | 'library' | 'builder' | 'player' | 'free_ride'>('home');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -245,7 +247,7 @@ export const App: React.FC = () => {
       return {
         ok: false,
         connected: false,
-        error: 'Garmin Connect solo está disponible en la app de escritorio.',
+        error: t('app.garmin.desktopOnly'),
       };
     }
     setGarminAuthBusy(true);
@@ -262,13 +264,13 @@ export const App: React.FC = () => {
       }
       return res;
     } catch (err) {
-      const msg = (err as Error).message || 'Error al conectar con Garmin Connect';
+      const msg = (err as Error).message || t('app.garmin.connectError');
       setGarminAuthError(msg);
       return { ok: false, connected: false, error: msg };
     } finally {
       setGarminAuthBusy(false);
     }
-  }, []);
+  }, [t]);
 
   const handleGarminLogout = useCallback(async () => {
     setGarminAuthBusy(true);
@@ -397,15 +399,15 @@ export const App: React.FC = () => {
       const res = await window.electronAPI.antStartScan();
       if (!res.ok) {
         setConnectionStatus('error');
-        setErrorMessage(res.error || 'No se pudo iniciar el escaneo ANT+.');
+        setErrorMessage(res.error || t('app.conn.antScanError'));
       } else if (res.stickName) {
         setStickName(res.stickName);
       }
     } else {
       setConnectionStatus('error');
-      setErrorMessage('La conexión ANT+ USB requiere ejecutarse dentro de la aplicación Electron.');
+      setErrorMessage(t('app.conn.antElectronRequired'));
     }
-  }, []);
+  }, [t]);
 
   const handleConnectAntDevice = useCallback(
     async (deviceId: number) => {
@@ -417,7 +419,7 @@ export const App: React.FC = () => {
         const res = await window.electronAPI.antConnectDevice(deviceId);
         if (!res.ok) {
           setConnectionStatus('error');
-          setErrorMessage(res.error || 'Fallo al conectar con el dispositivo ANT+.');
+          setErrorMessage(res.error || t('app.conn.antConnectError'));
         } else {
           setConnectionStatus('connected');
           setDeviceName(deviceId === 0 ? 'Tacx Neo 2 (Auto)' : `Tacx Neo 2 (#${deviceId})`);
@@ -425,10 +427,10 @@ export const App: React.FC = () => {
         }
       } else {
         setConnectionStatus('error');
-        setErrorMessage('La conexión ANT+ USB requiere ejecutarse dentro de Electron.');
+        setErrorMessage(t('app.conn.antElectronShort'));
       }
     },
-    [handleUpdateSettings]
+    [handleUpdateSettings, t]
   );
 
   // Connect Bluetooth
@@ -450,9 +452,9 @@ export const App: React.FC = () => {
       handleUpdateSettings({ preferredTransport: 'ble' });
     } catch (err) {
       setConnectionStatus('error');
-      setErrorMessage((err as Error).message || 'Error de conexión Bluetooth.');
+      setErrorMessage((err as Error).message || t('app.conn.bleConnectError'));
     }
-  }, [handleUpdateSettings]);
+  }, [handleUpdateSettings, t]);
 
   const handleSelectBleDevice = useCallback((deviceId: string) => {
     if (window.electronAPI?.selectBluetoothDevice) {
@@ -467,11 +469,11 @@ export const App: React.FC = () => {
 
     setActiveTransport('simulator');
     setConnectionStatus('connected');
-    setDeviceName('Rodillo Simulado');
+    setDeviceName(t('app.conn.simDeviceName'));
 
     simulatorTrainer.connect(
-      (t: TrainerTelemetry) =>
-        setTelemetry({ ...t, heartRateBpm: liveAntHrRef.current ?? t.heartRateBpm }),
+      (telem: TrainerTelemetry) =>
+        setTelemetry({ ...telem, heartRateBpm: liveAntHrRef.current ?? telem.heartRateBpm }),
       (s: TrainerStateEvent) => {
         setActiveTransport(s.transport);
         setConnectionStatus(s.status);
@@ -479,7 +481,7 @@ export const App: React.FC = () => {
       }
     );
     handleUpdateSettings({ preferredTransport: 'simulator' });
-  }, [handleDisconnectActiveTrainer, handleUpdateSettings]);
+  }, [handleDisconnectActiveTrainer, handleUpdateSettings, t]);
 
   // Connect & Disconnect ANT+ Heart Rate Strap (Channel 1)
   const handleConnectAntHr = useCallback(
@@ -491,18 +493,20 @@ export const App: React.FC = () => {
         const res = await window.electronAPI.antConnectHr(deviceId);
         if (!res.ok) {
           setHrStatus('error');
-          setHrErrorMessage(res.error || 'Fallo al conectar con el pulsómetro ANT+.');
+          setHrErrorMessage(res.error || t('app.conn.hrConnectError'));
         } else {
           setHrStatus('connected');
-          setHrDeviceName(deviceId === 0 ? 'Pulsómetro ANT+ (Auto)' : `Pulsómetro ANT+ (#${deviceId})`);
+          setHrDeviceName(
+            deviceId === 0 ? t('app.conn.hrAutoName') : t('app.conn.hrNamed', { id: deviceId })
+          );
           handleUpdateSettings({ lastAntHrDeviceId: deviceId });
         }
       } else {
         setHrStatus('error');
-        setHrErrorMessage('La conexión del pulsómetro ANT+ requiere ejecutarse en Electron.');
+        setHrErrorMessage(t('app.conn.hrElectronRequired'));
       }
     },
-    [handleUpdateSettings]
+    [handleUpdateSettings, t]
   );
 
   const handleDisconnectAntHr = useCallback(async () => {
@@ -550,7 +554,7 @@ export const App: React.FC = () => {
     const clone: Workout = {
       ...workout,
       id: `w-${Date.now()}`,
-      name: `${workout.name} (copia)`,
+      name: `${workout.name} ${t('app.workout.copySuffix')}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -558,7 +562,7 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteWorkout = (workoutId: string) => {
-    if (confirm('¿Seguro que deseas eliminar este entrenamiento?')) {
+    if (confirm(t('app.workout.deleteConfirm'))) {
       handleSaveWorkoutsList(workouts.filter((w) => w.id !== workoutId));
     }
   };
@@ -597,7 +601,7 @@ export const App: React.FC = () => {
       await handleSaveWorkoutsList([...importedAll, ...workouts]);
     }
     if (errors.length > 0) {
-      alert(`Algunos archivos no pudieron importarse:\n${errors.join('\n')}`);
+      alert(t('app.workout.importError', { errors: errors.join('\n') }));
     }
     e.target.value = '';
   };
@@ -640,7 +644,7 @@ export const App: React.FC = () => {
         <div className="modal-header">
           <div className="modal-title">
             <User size={22} style={{ color: 'var(--accent-cyan)' }} />
-            <span>Perfil de Ciclista y Fisiología</span>
+            <span>{t('app.profile.title')}</span>
           </div>
           <button
             className="btn btn-ghost btn-icon"
@@ -663,12 +667,16 @@ export const App: React.FC = () => {
               lineHeight: 1.45,
             }}
           >
-            💡 <strong>Cálculo Científico:</strong> El peso y tu frecuencia cardíaca se emplean para determinar de forma exacta las <strong>kilocalorías quemadas</strong> (eficiencia bruta mecánica del 23.9% + gasto basal Keytel) y las <strong>5 Zonas de Pulso Karvonen</strong> según tu Frecuencia Cardíaca de Reserva.
+            💡 <strong>{t('app.profile.scienceLabel')}</strong> {t('app.profile.scienceText1')}
+            <strong>{t('app.profile.scienceBold1')}</strong>
+            {t('app.profile.scienceText2')}
+            <strong>{t('app.profile.scienceBold2')}</strong>
+            {t('app.profile.scienceText3')}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
             <div>
-              <label className="form-label">Peso Corporal (kg)</label>
+              <label className="form-label">{t('app.profile.weightLabel')}</label>
               <NumericInput
                 min={1}
                 allowDecimal
@@ -678,12 +686,14 @@ export const App: React.FC = () => {
                 onChange={(val) => handleUpdateSettings({ weightKg: val })}
               />
               <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: 4 }}>
-                Relación: {(settings.ftp / Math.max(30, settings.weightKg)).toFixed(2)} W/kg
+                {t('app.profile.ratio', {
+                  ratio: (settings.ftp / Math.max(30, settings.weightKg)).toFixed(2),
+                })}
               </div>
             </div>
 
             <div>
-              <label className="form-label">Potencia Umbral (FTP W)</label>
+              <label className="form-label">{t('app.profile.ftpLabel')}</label>
               <NumericInput
                 min={1}
                 fallback={200}
@@ -696,7 +706,7 @@ export const App: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
             <div>
-              <label className="form-label">FC Máxima (ppm)</label>
+              <label className="form-label">{t('app.profile.maxHrLabel')}</label>
               <NumericInput
                 min={1}
                 fallback={190}
@@ -707,7 +717,7 @@ export const App: React.FC = () => {
             </div>
 
             <div>
-              <label className="form-label">FC en Reposo (ppm)</label>
+              <label className="form-label">{t('app.profile.restingHrLabel')}</label>
               <NumericInput
                 min={1}
                 fallback={55}
@@ -716,14 +726,14 @@ export const App: React.FC = () => {
                 onChange={(val) => handleUpdateSettings({ restingHr: val })}
               />
               <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                Para fórmula Karvonen (FC Reserva)
+                {t('app.profile.karvonenHint')}
               </div>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label className="form-label">Edad (años)</label>
+              <label className="form-label">{t('app.profile.ageLabel')}</label>
               <NumericInput
                 min={1}
                 allowEmpty
@@ -736,7 +746,7 @@ export const App: React.FC = () => {
             </div>
 
             <div>
-              <label className="form-label">Suavizado de Potencia</label>
+              <label className="form-label">{t('app.profile.smoothingLabel')}</label>
               <select
                 className="select-input"
                 value={settings.powerSmoothingSec ?? 3}
@@ -746,9 +756,9 @@ export const App: React.FC = () => {
                   })
                 }
               >
-                <option value={0}>Instantánea (0s)</option>
-                <option value={3}>Media 3s (Recomendado)</option>
-                <option value={5}>Media 5s (Estable)</option>
+                <option value={0}>{t('app.profile.smoothing0')}</option>
+                <option value={3}>{t('app.profile.smoothing3')}</option>
+                <option value={5}>{t('app.profile.smoothing5')}</option>
               </select>
             </div>
           </div>
@@ -759,16 +769,16 @@ export const App: React.FC = () => {
               <div>
                 <div className="garmin-profile-title">
                   <Link2 size={16} style={{ color: 'var(--accent-cyan)' }} />
-                  <span>Garmin Connect</span>
+                  <span>{t('app.garmin.title')}</span>
                 </div>
                 <div className="garmin-profile-status">
                   {garminStatus.connected ? (
                     <span className="garmin-status-connected">
-                      <CheckCircle2 size={14} /> Conectado como{' '}
-                      <strong>{garminStatus.displayName || 'Usuario Garmin'}</strong>
+                      <CheckCircle2 size={14} /> {t('app.garmin.connectedAs')}{' '}
+                      <strong>{garminStatus.displayName || t('app.garmin.defaultUser')}</strong>
                     </span>
                   ) : (
-                    <span className="garmin-status-disconnected">No vinculado</span>
+                    <span className="garmin-status-disconnected">{t('app.garmin.notLinked')}</span>
                   )}
                 </div>
               </div>
@@ -781,7 +791,7 @@ export const App: React.FC = () => {
                   disabled={garminAuthBusy}
                   onClick={handleGarminLogout}
                 >
-                  {garminAuthBusy ? <Loader2 size={14} className="spin" /> : 'Desvincular'}
+                  {garminAuthBusy ? <Loader2 size={14} className="spin" /> : t('app.garmin.unlink')}
                 </button>
               ) : (
                 <button
@@ -793,10 +803,10 @@ export const App: React.FC = () => {
                 >
                   {garminAuthBusy ? (
                     <>
-                      <Loader2 size={14} className="spin" /> Conectando...
+                      <Loader2 size={14} className="spin" /> {t('app.garmin.connecting')}
                     </>
                   ) : (
-                    'Vincular Garmin Connect'
+                    t('app.garmin.link')
                   )}
                 </button>
               )}
@@ -814,7 +824,7 @@ export const App: React.FC = () => {
                   handleUpdateSettings({ autoUploadGarmin: e.target.checked })
                 }
               />
-              <span>Subir automáticamente a Garmin Connect al completar sesión</span>
+              <span>{t('app.garmin.autoUpload')}</span>
             </label>
           </div>
         </div>
@@ -824,7 +834,7 @@ export const App: React.FC = () => {
             className="btn btn-emerald"
             onClick={() => setIsProfileModalOpen(false)}
           >
-            Guardar y Cerrar
+            {t('app.profile.saveClose')}
           </button>
         </div>
       </div>
@@ -840,9 +850,9 @@ export const App: React.FC = () => {
             className="btn btn-secondary"
             style={{ padding: '6px 12px', fontSize: '0.85rem' }}
             onClick={() => setCurrentView('home')}
-            title="Volver al menú principal"
+            title={t('app.header.homeTitle')}
           >
-            <ArrowLeft size={16} /> Inicio
+            <ArrowLeft size={16} /> {t('app.header.home')}
           </button>
         )}
         <img
@@ -862,7 +872,7 @@ export const App: React.FC = () => {
 
       <div className="header-actions">
         {/* Quick inline FTP & W/kg Editor */}
-        <div className="ftp-badge-pill" title="Tu Potencia Umbral Funcional (FTP) y relación W/kg">
+        <div className="ftp-badge-pill" title={t('app.header.ftpTitle')}>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600 }}>FTP:</span>
           <NumericInput
             className="ftp-input"
@@ -881,10 +891,10 @@ export const App: React.FC = () => {
         <button
           className="btn btn-secondary"
           onClick={() => setIsProfileModalOpen(true)}
-          title="Ajustar peso, FC Máx, FC Reposo y edad del ciclista"
+          title={t('app.header.profileTitle')}
           style={{ padding: '6px 12px', fontSize: '0.82rem' }}
         >
-          <User size={15} /> Perfil Ciclista
+          <User size={15} /> {t('app.header.profileBtn')}
         </button>
 
         {/* Quick HR Strap Status Pill in Header */}
@@ -892,12 +902,12 @@ export const App: React.FC = () => {
           <div
             className="connection-pill"
             onClick={() => setIsConnModalOpen(true)}
-            title="Pulsómetro ANT+ conectado en Canal 1"
+            title={t('app.header.hrTitle')}
             style={{ borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' }}
           >
             <Heart size={14} fill="#ef4444" color="#ef4444" className="animate-pulse" />
             <span style={{ color: '#fca5a5', fontWeight: 700, fontSize: '0.85rem' }}>
-              {hrBpm ? `${hrBpm} ppm` : 'Pulsómetro'}
+              {hrBpm ? `${hrBpm} ${t('app.header.bpmUnit')}` : t('app.header.hrFallback')}
             </span>
           </div>
         )}
@@ -906,7 +916,7 @@ export const App: React.FC = () => {
         <button
           className="btn btn-secondary btn-icon"
           onClick={() => handleUpdateSettings({ soundEnabled: !settings.soundEnabled })}
-          title={settings.soundEnabled ? 'Avisos sonoros habilitados' : 'Avisos sonoros silenciados'}
+          title={settings.soundEnabled ? t('app.header.soundOnTitle') : t('app.header.soundOffTitle')}
         >
           {settings.soundEnabled ? (
             <Volume2 size={18} style={{ color: 'var(--accent-cyan)' }} />
@@ -919,7 +929,7 @@ export const App: React.FC = () => {
         <div
           className="connection-pill"
           onClick={() => setIsConnModalOpen(true)}
-          title="Abrir panel de conexión del rodillo Tacx Neo 2"
+          title={t('app.header.connTitle')}
         >
           <span
             className={`status-dot ${
@@ -944,7 +954,7 @@ export const App: React.FC = () => {
           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
             {connectionStatus === 'connected'
               ? deviceName || 'Tacx Neo 2'
-              : 'Conectar Rodillo'}
+              : t('app.header.connectTrainer')}
           </span>
         </div>
 
@@ -955,9 +965,9 @@ export const App: React.FC = () => {
               htmlFor="library-import-input"
               className="btn btn-secondary"
               style={{ cursor: 'pointer' }}
-              title="Importar archivos .ZWO, .MRC, .ERG o .JSON"
+              title={t('app.header.importTitle')}
             >
-              <Upload size={16} /> Importar
+              <Upload size={16} /> {t('app.header.import')}
             </label>
             <input
               id="library-import-input"
@@ -970,10 +980,12 @@ export const App: React.FC = () => {
 
             {/* Create Workout Button */}
             <button className="btn btn-primary" onClick={handleCreateNewWorkout}>
-              <Plus size={16} /> Crear Nueva Sesión
+              <Plus size={16} /> {t('app.header.newWorkout')}
             </button>
           </>
         )}
+
+        <LanguageToggle />
       </div>
     </header>
   );
@@ -1057,16 +1069,19 @@ export const App: React.FC = () => {
             />
             <div className="brand-title">RuLo</div>
           </div>
-          <div className="ftp-badge-pill">
-            <span style={{ color: 'var(--text-muted)' }}>FTP:</span>
-            <NumericInput
-              className="ftp-input"
-              value={settings.ftp}
-              min={1}
-              fallback={200}
-              onChange={(val) => handleUpdateSettings({ ftp: val })}
-            />
-            <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>W</span>
+          <div className="header-actions">
+            <div className="ftp-badge-pill">
+              <span style={{ color: 'var(--text-muted)' }}>FTP:</span>
+              <NumericInput
+                className="ftp-input"
+                value={settings.ftp}
+                min={1}
+                fallback={200}
+                onChange={(val) => handleUpdateSettings({ ftp: val })}
+              />
+              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>W</span>
+            </div>
+            <LanguageToggle />
           </div>
         </header>
 
@@ -1091,9 +1106,9 @@ export const App: React.FC = () => {
 
         <main className="home-hero-container">
           <div className="home-hero-header">
-            <h1 className="home-hero-title">¿Cómo quieres entrenar hoy?</h1>
+            <h1 className="home-hero-title">{t('app.home.title')}</h1>
             <p className="home-hero-subtitle">
-              Elige rodaje libre inmediato en directo o selecciona una sesión estructurada por bloques.
+              {t('app.home.subtitle')}
             </p>
           </div>
 
@@ -1107,9 +1122,9 @@ export const App: React.FC = () => {
                 <div className="home-card-icon home-card-icon-emerald">
                   <Wind size={32} />
                 </div>
-                <h2 className="home-card-title">Solo Rodar</h2>
+                <h2 className="home-card-title">{t('app.home.freeride.title')}</h2>
                 <p className="home-card-desc">
-                  Rodaje libre inmediato con o sin modo ERG. Fija vatios al vuelo o salta entre zonas de potencia.
+                  {t('app.home.freeride.desc')}
                 </p>
               </div>
 
@@ -1121,7 +1136,7 @@ export const App: React.FC = () => {
                   setCurrentView('free_ride');
                 }}
               >
-                <Play size={20} fill="currentColor" /> Empezar a Rodar
+                <Play size={20} fill="currentColor" /> {t('app.home.freeride.cta')}
               </button>
             </div>
 
@@ -1134,9 +1149,9 @@ export const App: React.FC = () => {
                 <div className="home-card-icon home-card-icon-cyan">
                   <Layers size={32} />
                 </div>
-                <h2 className="home-card-title">Mis Workouts</h2>
+                <h2 className="home-card-title">{t('app.home.library.title')}</h2>
                 <p className="home-card-desc">
-                  Accede a tus {workouts.length} sesiones estructuradas, crea nuevos bloques o importa desde .ZWO/.MRC.
+                  {t('app.home.library.desc', { count: workouts.length })}
                 </p>
               </div>
 
@@ -1148,7 +1163,7 @@ export const App: React.FC = () => {
                   setCurrentView('library');
                 }}
               >
-                <Activity size={20} /> Abrir Mis Workouts
+                <Activity size={20} /> {t('app.home.library.cta')}
               </button>
             </div>
           </div>
@@ -1169,13 +1184,13 @@ export const App: React.FC = () => {
       <main className="library-container">
         <div className="library-header">
           <div>
-            <h1 className="library-title">Sesiones Estructuradas en ERG</h1>
+            <h1 className="library-title">{t('app.library.title')}</h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: 4 }}>
-              Entrenamientos controlados automáticamente por vatios en tu Tacx Neo 2 sin fricción ni bloatware.
+              {t('app.library.subtitle')}
             </p>
           </div>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)', fontWeight: 600 }}>
-            {workouts.length} entrenamientos disponibles
+            {t('app.library.count', { count: workouts.length })}
           </span>
         </div>
 
@@ -1192,7 +1207,7 @@ export const App: React.FC = () => {
                   </div>
 
                   <p className="workout-desc">
-                    {workout.description || 'Entrenamiento estructurado en modo ERG.'}
+                    {workout.description || t('app.library.defaultDesc')}
                   </p>
 
                   {/* Mini Preview Chart */}
@@ -1222,7 +1237,7 @@ export const App: React.FC = () => {
                     </div>
                     <div className="stat-pill">
                       <Zap size={12} style={{ color: 'var(--accent-amber)' }} />
-                      <span>{stats.avgWatts} W med</span>
+                      <span>{t('app.library.avgWatts', { watts: stats.avgWatts })}</span>
                     </div>
                     <div className="stat-pill">
                       <Flame size={12} style={{ color: '#fb923c' }} />
@@ -1244,13 +1259,13 @@ export const App: React.FC = () => {
                     style={{ flex: 1, padding: '10px 14px', fontSize: '0.92rem', fontWeight: 700 }}
                     onClick={() => handleStartRide(workout)}
                   >
-                    <Play size={16} fill="currentColor" /> Entrenar en ERG
+                    <Play size={16} fill="currentColor" /> {t('app.library.startErg')}
                   </button>
 
                   <button
                     className="btn btn-secondary btn-icon"
                     onClick={() => handleEditWorkout(workout)}
-                    title="Editar entrenamiento"
+                    title={t('app.library.editTitle')}
                   >
                     <Edit3 size={15} />
                   </button>
@@ -1258,7 +1273,7 @@ export const App: React.FC = () => {
                   <button
                     className="btn btn-secondary btn-icon"
                     onClick={() => handleDuplicateWorkout(workout)}
-                    title="Duplicar entrenamiento"
+                    title={t('app.library.duplicateTitle')}
                   >
                     <Copy size={15} />
                   </button>
@@ -1267,7 +1282,7 @@ export const App: React.FC = () => {
                     className="btn btn-ghost btn-icon"
                     style={{ color: '#f87171' }}
                     onClick={() => handleDeleteWorkout(workout.id)}
-                    title="Eliminar de la biblioteca"
+                    title={t('app.library.deleteTitle')}
                   >
                     <Trash2 size={15} />
                   </button>

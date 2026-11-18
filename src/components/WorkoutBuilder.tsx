@@ -21,6 +21,7 @@ import { WorkoutChart } from './WorkoutChart';
 import { NumericInput } from './NumericInput';
 import { computeWorkoutStats, formatTime, resolveWatts } from '../utils/workoutMath';
 import { parseWorkoutFileContent } from '../utils/workoutImporter';
+import { useI18n } from '../i18n';
 
 export interface WorkoutBuilderProps {
   initialWorkout?: Workout | null;
@@ -35,7 +36,8 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
   onSave,
   onCancel,
 }) => {
-  const [name, setName] = useState(initialWorkout?.name || 'Nuevo Entrenamiento ERG');
+  const { t } = useI18n();
+  const [name, setName] = useState(initialWorkout?.name || t('builder.defaultName'));
   const [description, setDescription] = useState(initialWorkout?.description || '');
   const [blocks, setBlocks] = useState<WorkoutBlock[]>(
     initialWorkout?.blocks && initialWorkout.blocks.length > 0
@@ -43,7 +45,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
       : [
           {
             id: 'b-warmup',
-            label: 'Calentamiento Progresivo',
+            label: t('builder.defaultWarmup'),
             type: 'ramp',
             durationSec: 600,
             unit: 'ftp_percent',
@@ -53,7 +55,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           },
           {
             id: 'b-work',
-            label: 'Bloque Principal',
+            label: t('builder.defaultMain'),
             type: 'steady',
             durationSec: 900,
             unit: 'ftp_percent',
@@ -63,7 +65,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           },
           {
             id: 'b-cooldown',
-            label: 'Enfriamiento',
+            label: t('builder.defaultCooldown'),
             type: 'ramp',
             durationSec: 300,
             unit: 'ftp_percent',
@@ -107,7 +109,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
   const addSteadyBlock = () => {
     const newBlock: WorkoutBlock = {
       id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      label: 'Intervalo Fijo',
+      label: t('builder.newSteadyLabel'),
       type: 'steady',
       durationSec: 300,
       unit: 'ftp_percent',
@@ -121,7 +123,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
   const addRampBlock = () => {
     const newBlock: WorkoutBlock = {
       id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      label: 'Rampa',
+      label: t('builder.newRampLabel'),
       type: 'ramp',
       durationSec: 300,
       unit: 'ftp_percent',
@@ -140,7 +142,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
     for (let i = 1; i <= genRepeats; i++) {
       newBlocks.push({
         id: `gen-work-${Date.now()}-${i}`,
-        label: `Intervalo ${i}`,
+        label: t('builder.genWorkLabel', { n: i }),
         type: 'steady',
         durationSec: workDurationSec,
         unit: genWorkUnit,
@@ -151,7 +153,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
 
       newBlocks.push({
         id: `gen-rest-${Date.now()}-${i}`,
-        label: `Recuperación ${i}`,
+        label: t('builder.genRestLabel', { n: i }),
         type: 'steady',
         durationSec: restDurationSec,
         unit: genRestUnit,
@@ -174,7 +176,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
     const clone: WorkoutBlock = {
       ...original,
       id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      label: `${original.label || 'Bloque'} (copia)`,
+      label: t('builder.copySuffix', { label: original.label || t('builder.blockFallback') }),
     };
     const updated = [...blocks];
     updated.splice(index + 1, 0, clone);
@@ -195,7 +197,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
 
   const deleteBlock = (index: number) => {
     if (blocks.length <= 1) {
-      alert('El entrenamiento debe contener al menos 1 bloque.');
+      alert(t('builder.minOneBlockAlert'));
       return;
     }
     setBlocks(blocks.filter((_, i) => i !== index));
@@ -229,7 +231,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           setBlocks(imported.blocks);
         }
       } catch (err) {
-        alert((err as Error).message || 'Error al importar el archivo de entrenamiento.');
+        alert((err as Error).message || t('builder.importError'));
       }
     };
     reader.readAsText(file);
@@ -238,11 +240,11 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
 
   const handleSave = () => {
     if (!name.trim()) {
-      alert('Por favor introduce un nombre para el entrenamiento.');
+      alert(t('builder.nameRequiredAlert'));
       return;
     }
     if (blocks.length === 0) {
-      alert('El entrenamiento debe contener al menos un bloque.');
+      alert(t('builder.minOneBlockSaveAlert'));
       return;
     }
     onSave(currentWorkout);
@@ -261,10 +263,10 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn btn-secondary" onClick={onCancel}>
-            <X size={18} /> Cancelar
+            <X size={18} /> {t('builder.cancel')}
           </button>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc' }}>
-            {initialWorkout ? 'Editar Entrenamiento ERG' : 'Diseñador de Entrenamiento ERG'}
+            {initialWorkout ? t('builder.editTitle') : t('builder.createTitle')}
           </h1>
         </div>
 
@@ -273,9 +275,9 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             htmlFor={fileInputId}
             className="btn btn-secondary"
             style={{ cursor: 'pointer', padding: '8px 14px' }}
-            title="Importar sesión desde archivo .ZWO (Zwift), .MRC, .ERG o .JSON"
+            title={t('builder.importTitle')}
           >
-            <Upload size={16} /> Importar (.ZWO / .MRC / .ERG)
+            <Upload size={16} /> {t('builder.importBtn')}
           </label>
           <input
             id={fileInputId}
@@ -288,9 +290,9 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           <button
             className="btn btn-secondary"
             onClick={handleExportJson}
-            title="Exportar archivo de entrenamiento .JSON"
+            title={t('builder.exportTitle')}
           >
-            <Download size={16} /> Exportar
+            <Download size={16} /> {t('builder.exportBtn')}
           </button>
 
           <button
@@ -298,7 +300,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             onClick={handleSave}
             style={{ padding: '10px 24px' }}
           >
-            <Save size={18} /> Guardar Sesión
+            <Save size={18} /> {t('builder.saveBtn')}
           </button>
         </div>
       </div>
@@ -314,22 +316,22 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
         }}
       >
         <div>
-          <label className="form-label">Nombre del Entrenamiento</label>
+          <label className="form-label">{t('builder.nameLabel')}</label>
           <input
             type="text"
             className="input-text"
-            placeholder="ej. Intervalos Sweet Spot 3x10 min"
+            placeholder={t('builder.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={{ fontWeight: 700, fontSize: '1rem' }}
           />
         </div>
         <div>
-          <label className="form-label">Descripción u objetivo (opcional)</label>
+          <label className="form-label">{t('builder.descLabel')}</label>
           <input
             type="text"
             className="input-text"
-            placeholder="ej. Trabajo en zona 4 para elevar el umbral funcional con cadencia ágil"
+            placeholder={t('builder.descPlaceholder')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -347,19 +349,19 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
           }}
         >
           <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-            Perfil de Potencia ERG (Calculado con FTP {ftp} W)
+            {t('builder.chartTitle', { ftp })}
           </div>
 
           {/* Stats summary pills */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <div className="stat-pill">
               <Clock size={13} style={{ color: 'var(--accent-cyan)' }} />
-              <span>Duración:</span>
+              <span>{t('builder.statDuration')}</span>
               <strong>{formatTime(stats.totalDurationSec)}</strong>
             </div>
             <div className="stat-pill">
               <Zap size={13} style={{ color: 'var(--accent-amber)' }} />
-              <span>Media:</span>
+              <span>{t('builder.statAvg')}</span>
               <strong>{stats.avgWatts} W</strong>
             </div>
             <div className="stat-pill">
@@ -377,7 +379,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             </div>
             <div className="stat-pill">
               <Flame size={13} style={{ color: 'var(--accent-rose)' }} />
-              <span>Energía:</span>
+              <span>{t('builder.statEnergy')}</span>
               <strong>~{stats.estimatedKcal} kcal ({stats.workKj} kJ)</strong>
             </div>
           </div>
@@ -399,22 +401,22 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
         }}
       >
         <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>
-          Bloques del Entrenamiento ({blocks.length})
+          {t('builder.blocksHeader', { count: blocks.length })}
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className="btn btn-secondary" onClick={addSteadyBlock}>
-            <Plus size={16} /> + Bloque Fijo
+            <Plus size={16} /> {t('builder.addSteadyBtn')}
           </button>
           <button className="btn btn-secondary" onClick={addRampBlock}>
-            <TrendingUp size={16} /> + Rampa
+            <TrendingUp size={16} /> {t('builder.addRampBtn')}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => setShowIntervalGen(!showIntervalGen)}
             style={{ background: showIntervalGen ? '#0369a1' : undefined }}
           >
-            <Layers size={16} /> + Serie de Intervalos (Repetidor)
+            <Layers size={16} /> {t('builder.addSeriesBtn')}
           </button>
         </div>
       </div>
@@ -441,7 +443,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Layers size={20} style={{ color: 'var(--accent-cyan)' }} />
               <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>
-                Generador de Series de Intervalos
+                {t('builder.genTitle')}
               </strong>
             </div>
             <button
@@ -461,7 +463,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
             }}
           >
             <div>
-              <label className="form-label">Repeticiones</label>
+              <label className="form-label">{t('builder.genRepeats')}</label>
               <NumericInput
                 min={1}
                 fallback={1}
@@ -488,14 +490,14 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   marginBottom: 8,
                 }}
               >
-                Bloque de Trabajo (On)
+                {t('builder.genWorkTitle')}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <NumericInput
                   min={0}
                   allowZero
                   fallback={0}
-                  placeholder="Min"
+                  placeholder={t('builder.minPlaceholder')}
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genWorkMin}
@@ -507,7 +509,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   max={59}
                   allowZero
                   fallback={0}
-                  placeholder="Seg"
+                  placeholder={t('builder.secPlaceholder')}
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genWorkSec}
@@ -530,7 +532,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   onChange={(e) => setGenWorkUnit(e.target.value as PowerUnit)}
                 >
                   <option value="ftp_percent">% FTP</option>
-                  <option value="watts">Vatios (W)</option>
+                  <option value="watts">{t('builder.wattsOption')}</option>
                 </select>
               </div>
             </div>
@@ -552,14 +554,14 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   marginBottom: 8,
                 }}
               >
-                Recuperación (Off)
+                {t('builder.genRestTitle')}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <NumericInput
                   min={0}
                   allowZero
                   fallback={0}
-                  placeholder="Min"
+                  placeholder={t('builder.minPlaceholder')}
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genRestMin}
@@ -571,7 +573,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   max={59}
                   allowZero
                   fallback={0}
-                  placeholder="Seg"
+                  placeholder={t('builder.secPlaceholder')}
                   className="input-number"
                   style={{ width: '65px' }}
                   value={genRestSec}
@@ -594,7 +596,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   onChange={(e) => setGenRestUnit(e.target.value as PowerUnit)}
                 >
                   <option value="ftp_percent">% FTP</option>
-                  <option value="watts">Vatios (W)</option>
+                  <option value="watts">{t('builder.wattsOption')}</option>
                 </select>
               </div>
             </div>
@@ -605,7 +607,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                 style={{ padding: '10px 18px' }}
                 onClick={generateIntervalSeries}
               >
-                Generar {genRepeats * 2} bloques
+                {t('builder.genSubmitBtn', { count: genRepeats * 2 })}
               </button>
             </div>
           </div>
@@ -642,7 +644,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                 <input
                   type="text"
                   className="input-text"
-                  placeholder="Etiqueta"
+                  placeholder={t('builder.blockLabelPlaceholder')}
                   value={block.label || ''}
                   onChange={(e) => updateBlock(idx, { label: e.target.value })}
                 />
@@ -661,8 +663,8 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                     });
                   }}
                 >
-                  <option value="steady">Fijo</option>
-                  <option value="ramp">Rampa</option>
+                  <option value="steady">{t('builder.typeSteady')}</option>
+                  <option value="ramp">{t('builder.typeRamp')}</option>
                 </select>
               </div>
 
@@ -778,7 +780,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   style={{ width: '30px', height: '30px' }}
                   onClick={() => moveBlock(idx, 'up')}
                   disabled={idx === 0}
-                  title="Subir bloque"
+                  title={t('builder.moveUpTitle')}
                 >
                   <ArrowUp size={14} />
                 </button>
@@ -787,7 +789,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   style={{ width: '30px', height: '30px' }}
                   onClick={() => moveBlock(idx, 'down')}
                   disabled={idx === blocks.length - 1}
-                  title="Bajar bloque"
+                  title={t('builder.moveDownTitle')}
                 >
                   <ArrowDown size={14} />
                 </button>
@@ -795,7 +797,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   className="btn btn-ghost btn-icon"
                   style={{ width: '30px', height: '30px' }}
                   onClick={() => duplicateBlock(idx)}
-                  title="Duplicar bloque"
+                  title={t('builder.duplicateTitle')}
                 >
                   <Copy size={14} />
                 </button>
@@ -803,7 +805,7 @@ export const WorkoutBuilder: React.FC<WorkoutBuilderProps> = ({
                   className="btn btn-ghost btn-icon"
                   style={{ width: '30px', height: '30px', color: '#f87171' }}
                   onClick={() => deleteBlock(idx)}
-                  title="Eliminar bloque"
+                  title={t('builder.deleteTitle')}
                 >
                   <Trash2 size={14} />
                 </button>

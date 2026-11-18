@@ -1,6 +1,7 @@
 import React, { useState, useId } from 'react';
 import { Workout, WorkoutBlock, RecordedSample } from '../types/workout';
 import { getPowerZone, resolveWatts, formatTime } from '../utils/workoutMath';
+import { useI18n } from '../i18n';
 
 export interface WorkoutChartProps {
   workout: Workout;
@@ -37,6 +38,7 @@ export const WorkoutChart: React.FC<WorkoutChartProps> = ({
   showFtpLine = true,
   className = '',
 }) => {
+  const { t } = useI18n();
   const chartId = useId();
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
 
@@ -50,7 +52,7 @@ export const WorkoutChart: React.FC<WorkoutChartProps> = ({
         style={{ height }}
       >
         <span style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-          No hay bloques definidos para graficar
+          {t('chart.empty')}
         </span>
       </div>
     );
@@ -362,12 +364,19 @@ export const WorkoutChart: React.FC<WorkoutChartProps> = ({
           }}
         >
           <div style={{ fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
-            Bloque {tooltip.blockIndex + 1}: {tooltip.block.label || (tooltip.block.type === 'ramp' ? 'Rampa' : 'Fijo')}
+            {t('chart.tooltipBlock', {
+              index: tooltip.blockIndex + 1,
+              label:
+                tooltip.block.label ||
+                (tooltip.block.type === 'ramp' ? t('chart.typeRamp') : t('chart.typeSteady')),
+            })}
           </div>
           <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-            Duración: <strong style={{ color: '#e2e8f0' }}>{formatTime(tooltip.block.durationSec)}</strong>
+            {t('chart.tooltipDuration')}{' '}
+            <strong style={{ color: '#e2e8f0' }}>{formatTime(tooltip.block.durationSec)}</strong>
             {' · '}
-            Inicio: <span style={{ color: '#94a3b8' }}>{formatTime(tooltip.startSec)}</span>
+            {t('chart.tooltipStart')}{' '}
+            <span style={{ color: '#94a3b8' }}>{formatTime(tooltip.startSec)}</span>
           </div>
           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
             {tooltip.block.type === 'steady' ? (

@@ -60,6 +60,7 @@ import {
   playWorkoutCompleteFanfare,
 } from '../services/soundCue';
 import { generateTcx, generateFitBase64 } from '../services/activityExporter';
+import { useI18n } from '../i18n';
 
 export interface WorkoutRidePlayerProps {
   workout: Workout;
@@ -110,6 +111,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   autoUploadGarmin = false,
   onGarminLogin,
 }) => {
+  const { t } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [biasWatts, setBiasWatts] = useState(0);
@@ -179,7 +181,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             e.stopPropagation();
             toggleFieldBlur(key);
           }}
-          title={isBlur ? 'Quitar desenfoque' : 'Desenfocar valor (Blur)'}
+          title={isBlur ? t('player.blurRemove') : t('player.blurValue')}
         >
           <ScanEye size={isSecMetric ? 13 : 15} />
         </button>
@@ -190,7 +192,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             e.stopPropagation();
             hideField(key);
           }}
-          title="Ocultar panel (restaurar desde Campos)"
+          title={t('player.hidePanelRestore')}
         >
           <EyeOff size={isSecMetric ? 13 : 15} />
         </button>
@@ -206,14 +208,14 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   };
 
   const ALL_FIELD_CONFIG: { key: SessionFieldKey; label: string }[] = [
-    { key: 'power', label: 'Potencia y ERG' },
-    { key: 'blockTimer', label: 'Tiempo de Bloque' },
-    { key: 'sessionTimer', label: 'Tiempo de Sesión' },
-    { key: 'cadence', label: 'Cadencia' },
-    { key: 'speedDistance', label: 'Velocidad y Distancia' },
-    { key: 'heartRate', label: 'Pulso Cardíaco' },
-    { key: 'energy', label: 'Energía (kcal / kJ)' },
-    { key: 'chart', label: 'Gráfica de Sesión' },
+    { key: 'power', label: t('player.fieldPower') },
+    { key: 'blockTimer', label: t('player.fieldBlockTimer') },
+    { key: 'sessionTimer', label: t('player.fieldSessionTimer') },
+    { key: 'cadence', label: t('player.fieldCadence') },
+    { key: 'speedDistance', label: t('player.fieldSpeedDistance') },
+    { key: 'heartRate', label: t('player.fieldHeartRate') },
+    { key: 'energy', label: t('player.fieldEnergy') },
+    { key: 'chart', label: t('player.fieldChart') },
   ];
 
   const setAllFieldsVisible = () => {
@@ -548,7 +550,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   };
 
   const handleEndEarly = () => {
-    if (confirm('¿Deseas finalizar este entrenamiento ahora?')) {
+    if (confirm(t('player.confirmEndEarly'))) {
       setIsPlaying(false);
       setIsFinished(true);
       if (soundEnabled) playWorkoutCompleteFanfare();
@@ -578,9 +580,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           tcxContent,
         });
         if (!res.canceled && !res.error) {
-          setExportMessage(`Archivo .TCX guardado en: ${res.filePath || defaultFileName}`);
+          setExportMessage(t('player.tcxSaved', { path: res.filePath || defaultFileName }));
         } else if (res.error) {
-          alert(`Error al guardar .TCX: ${res.error}`);
+          alert(t('player.tcxSaveError', { error: res.error }));
         }
         return;
       }
@@ -593,9 +595,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       a.download = defaultFileName;
       a.click();
       URL.revokeObjectURL(url);
-      setExportMessage('Descarga .TCX iniciada.');
+      setExportMessage(t('player.tcxDownloadStarted'));
     } catch (err) {
-      alert(`Error al generar TCX: ${(err as Error).message}`);
+      alert(t('player.tcxGenError', { error: (err as Error).message }));
     }
   };
 
@@ -613,9 +615,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           fitBase64,
         });
         if (!res.canceled && !res.error) {
-          setExportMessage(`Archivo .FIT guardado en: ${res.filePath || defaultFileName}`);
+          setExportMessage(t('player.fitSaved', { path: res.filePath || defaultFileName }));
         } else if (res.error) {
-          alert(`Error al guardar .FIT: ${res.error}`);
+          alert(t('player.fitSaveError', { error: res.error }));
         }
         return;
       }
@@ -634,9 +636,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       a.download = defaultFileName;
       a.click();
       URL.revokeObjectURL(url);
-      setExportMessage('Descarga .FIT iniciada.');
+      setExportMessage(t('player.fitDownloadStarted'));
     } catch (err) {
-      alert(`Error al generar FIT: ${(err as Error).message}`);
+      alert(t('player.fitGenError', { error: (err as Error).message }));
     }
   };
 
@@ -655,7 +657,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           setGarminUploadState('error');
           setGarminResult({
             ok: false,
-            error: 'No hay gestor de inicio de sesión de Garmin Connect disponible.',
+            error: t('player.garminNoLoginManager'),
           });
           return;
         }
@@ -664,7 +666,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           setGarminUploadState('error');
           setGarminResult({
             ok: false,
-            error: loginRes.error || 'No se pudo iniciar sesión en Garmin Connect.',
+            error: loginRes.error || t('player.garminLoginFailed'),
           });
           return;
         }
@@ -674,7 +676,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
         setGarminUploadState('error');
         setGarminResult({
           ok: false,
-          error: 'La subida directa a Garmin Connect solo está disponible en la app de escritorio.',
+          error: t('player.garminDesktopOnly'),
         });
         return;
       }
@@ -697,7 +699,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
       setGarminUploadState('error');
       setGarminResult({
         ok: false,
-        error: (err as Error).message || 'Error inesperado al subir a Garmin Connect.',
+        error: (err as Error).message || t('player.garminUnexpectedError'),
       });
     }
   };
@@ -807,7 +809,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8fafc' }}>
             {workout.name}
           </div>
-          <span className="brand-badge">ERG ACTIVO</span>
+          <span className="brand-badge">{t('player.ergActive')}</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -815,7 +817,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           <div
             className="connection-pill"
             onClick={onOpenConnectionModal}
-            title="Pulsa para cambiar o reconectar el rodillo Tacx Neo 2"
+            title={t('player.trainerPillTitle')}
           >
             <span
               className={`status-dot ${
@@ -834,7 +836,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
               {connectionStatus === 'connected'
                 ? deviceName || 'Tacx Neo 2'
-                : 'Rodillo Desconectado'}
+                : t('player.trainerDisconnected')}
             </span>
           </div>
 
@@ -845,8 +847,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             onClick={toggleNoClockMode}
             title={
               isNoClockActive
-                ? 'Modo Sin Reloj activo (tiempos desenfocados). Clic para volver a ver los tiempos.'
-                : 'Activar Modo Sin Reloj (desenfoca cronómetros de bloque y sesión para entrenar por sensaciones)'
+                ? t('player.noClockActiveTitle')
+                : t('player.noClockInactiveTitle')
             }
           >
             {isNoClockActive ? (
@@ -854,7 +856,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             ) : (
               <Timer size={16} />
             )}
-            <span>Sin Reloj</span>
+            <span>{t('player.noClock')}</span>
           </button>
 
           {/* Popover / Menú "Campos" (Vista) */}
@@ -863,10 +865,10 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               type="button"
               className={`btn ${isViewMenuOpen ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
-              title="Personalizar qué datos se muestran, se desenfocan o se ocultan"
+              title={t('player.fieldsBtnTitle')}
             >
               <SlidersHorizontal size={16} />
-              <span>Campos</span>
+              <span>{t('player.fieldsBtn')}</span>
               {alteredFieldsCount > 0 && (
                 <span className="field-badge-count">{alteredFieldsCount}</span>
               )}
@@ -875,14 +877,14 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             {isViewMenuOpen && (
               <div className="fields-popover-dropdown">
                 <div className="fields-popover-header">
-                  <div className="fields-popover-title">Visibilidad de Campos</div>
+                  <div className="fields-popover-title">{t('player.fieldsVisibilityTitle')}</div>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     style={{ fontSize: '0.75rem', padding: '2px 8px', color: 'var(--accent-cyan)' }}
                     onClick={setAllFieldsVisible}
                   >
-                    Mostrar todo
+                    {t('player.showAll')}
                   </button>
                 </div>
 
@@ -897,25 +899,25 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                             type="button"
                             className={`field-btn-group-item ${mode === 'visible' ? 'active-visible' : ''}`}
                             onClick={() => setFieldMode(key, 'visible')}
-                            title="Visible de forma continua"
+                            title={t('player.modeVisibleTitle')}
                           >
-                            Visible
+                            {t('player.modeVisible')}
                           </button>
                           <button
                             type="button"
                             className={`field-btn-group-item ${mode === 'blur' ? 'active-blur' : ''}`}
                             onClick={() => setFieldMode(key, 'blur')}
-                            title="Desenfocado (visible al pasar el ratón)"
+                            title={t('player.modeBlurTitle')}
                           >
-                            Blur
+                            {t('player.modeBlur')}
                           </button>
                           <button
                             type="button"
                             className={`field-btn-group-item ${mode === 'hidden' ? 'active-hidden' : ''}`}
                             onClick={() => setFieldMode(key, 'hidden')}
-                            title="Completamente oculto"
+                            title={t('player.modeHiddenTitle')}
                           >
-                            Oculto
+                            {t('player.modeHidden')}
                           </button>
                         </div>
                       </div>
@@ -924,7 +926,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 </div>
 
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', borderTop: '1px solid #1e293b', paddingTop: 6 }}>
-                  Tip: Pulsa el icono de ojo en cada tarjeta para alternar modos. Al pasar el cursor sobre un campo desenfocado se revela suavemente.
+                  {t('player.fieldsTip')}
                 </div>
               </div>
             )}
@@ -934,7 +936,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           <button
             className="btn btn-secondary btn-icon"
             onClick={onToggleSound}
-            title={soundEnabled ? 'Avisos sonoros activados' : 'Avisos sonoros silenciados'}
+            title={soundEnabled ? t('player.soundOn') : t('player.soundOff')}
           >
             {soundEnabled ? (
               <Volume2 size={18} style={{ color: 'var(--accent-cyan)' }} />
@@ -948,7 +950,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             className="btn btn-secondary"
             onClick={() => {
               if (isPlaying) {
-                if (confirm('El entrenamiento está en curso. ¿Deseas pausar y salir?')) {
+                if (confirm(t('player.confirmExitPlaying'))) {
                   setIsPlaying(false);
                   onExit();
                 }
@@ -957,7 +959,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               }
             }}
           >
-            <X size={16} /> Salir
+            <X size={16} /> {t('player.exit')}
           </button>
         </div>
       </div>
@@ -971,7 +973,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                    Potencia Actual
+                    {t('player.currentPower')}
                   </span>
                   {getFieldMode('power') !== 'blur' && (
                     <span
@@ -1001,7 +1003,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
+                      {t('player.vsTarget', { delta: powerDelta >= 0 ? `+${powerDelta}` : powerDelta })}
                     </div>
                   )}
 
@@ -1013,9 +1015,9 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       e.stopPropagation();
                       handleCycleSmoothing();
                     }}
-                    title="Suavizado de potencia mostrada (media móvil)"
+                    title={t('player.smoothingMovingAvgTitle')}
                   >
-                    {powerSmoothingSec === 0 ? 'Inst.' : `${powerSmoothingSec}s`}
+                    {powerSmoothingSec === 0 ? t('player.smoothingInst') : `${powerSmoothingSec}s`}
                   </button>
 
                   {/* Field Actions: Blur & Hide */}
@@ -1053,7 +1055,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 >
                   <div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600 }}>
-                      OBJETIVO ERG TACX
+                      {t('player.ergTargetTacx')}
                     </div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>
                       {targetWatts}{' '}
@@ -1069,7 +1071,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       className="btn btn-secondary"
                       style={{ padding: '4px 8px', fontSize: '0.75rem' }}
                       onClick={() => adjustBias(-10)}
-                      title="Reducir 10 vatios"
+                      title={t('player.reduce10W')}
                     >
                       -10
                     </button>
@@ -1077,7 +1079,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       className="btn btn-secondary"
                       style={{ padding: '4px 8px', fontSize: '0.75rem' }}
                       onClick={() => adjustBias(-5)}
-                      title="Reducir 5 vatios"
+                      title={t('player.reduce5W')}
                     >
                       -5
                     </button>
@@ -1085,7 +1087,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       className="btn btn-secondary"
                       style={{ padding: '4px 8px', fontSize: '0.75rem' }}
                       onClick={() => adjustBias(5)}
-                      title="Añadir 5 vatios"
+                      title={t('player.add5W')}
                     >
                       +5
                     </button>
@@ -1093,7 +1095,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       className="btn btn-secondary"
                       style={{ padding: '4px 8px', fontSize: '0.75rem' }}
                       onClick={() => adjustBias(10)}
-                      title="Añadir 10 vatios"
+                      title={t('player.add10W')}
                     >
                       +10
                     </button>
@@ -1102,7 +1104,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                         className="btn btn-ghost"
                         style={{ padding: '4px 6px', fontSize: '0.75rem', color: '#f59e0b' }}
                         onClick={resetBias}
-                        title="Restablecer bias a 0W"
+                        title={t('player.resetBiasTitle')}
                       >
                         <RotateCcw size={13} />
                       </button>
@@ -1118,12 +1120,12 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             <div className={`cockpit-tile ${isCountdownCritical ? 'pulse-alert' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Tiempo Restante Bloque
+                  {t('player.blockRemainingTitle')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {getFieldMode('blockTimer') !== 'blur' && (
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                      Bloque {snapshot.blockIndex + 1} de {workout.blocks.length}
+                      {t('player.blockOf', { current: snapshot.blockIndex + 1, total: workout.blocks.length })}
                     </span>
                   )}
                   {renderCardActions('blockTimer')}
@@ -1133,7 +1135,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               {/* Blurred Content Container */}
               <div className={`session-field-content ${getFieldMode('blockTimer') === 'blur' ? 'is-blurred' : ''}`}>
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', marginTop: 4 }}>
-                  {snapshot.block?.label || (snapshot.block?.type === 'ramp' ? 'Rampa' : 'Intervalo Fijo')}
+                  {snapshot.block?.label ||
+                    (snapshot.block?.type === 'ramp' ? t('player.blockRamp') : t('player.blockSteady'))}
                 </div>
 
                 {/* Countdown Hero Number */}
@@ -1179,13 +1182,16 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <ArrowRight size={14} style={{ color: 'var(--text-dim)' }} />
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', fontWeight: 600 }}>
-                      Siguiente sector:
+                      {t('player.nextSector')}
                     </span>
                   </div>
 
                   {snapshot.nextBlock ? (
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
-                      {snapshot.nextBlock.label || (snapshot.nextBlock.type === 'ramp' ? 'Rampa' : 'Fijo')}{' '}
+                      {snapshot.nextBlock.label ||
+                        (snapshot.nextBlock.type === 'ramp'
+                          ? t('player.blockRamp')
+                          : t('player.blockSteadyShort'))}{' '}
                       · {formatTime(snapshot.nextBlock.durationSec)} @{' '}
                       <span style={{ color: 'var(--accent-cyan)' }}>
                         {snapshot.nextBlock.type === 'steady'
@@ -1195,7 +1201,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     </div>
                   ) : (
                     <span style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)', fontWeight: 700 }}>
-                      ¡Último bloque! 🎉
+                      {t('player.lastBlock')}
                     </span>
                   )}
                 </div>
@@ -1208,12 +1214,12 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             <div className="cockpit-tile">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Tiempo Restante Sesión
+                  {t('player.sessionRemainingTitle')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {getFieldMode('sessionTimer') !== 'blur' && (
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                      {Math.round(sessionProgressPct)}% completado
+                      {t('player.pctCompleted', { pct: Math.round(sessionProgressPct) })}
                     </span>
                   )}
                   {renderCardActions('sessionTimer')}
@@ -1259,10 +1265,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                    Transcurrido: <strong style={{ color: '#fff' }}>{formatTime(snapshot.sessionElapsedSec)}</strong>
+                    {t('player.elapsed')}{' '}
+                    <strong style={{ color: '#fff' }}>{formatTime(snapshot.sessionElapsedSec)}</strong>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                    Total: <strong style={{ color: '#fff' }}>{formatTime(totalDurationSec)}</strong>
+                    {t('player.total')} <strong style={{ color: '#fff' }}>{formatTime(totalDurationSec)}</strong>
                   </div>
                 </div>
               </div>
@@ -1282,7 +1289,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
                 <div>
-                  <div className="sec-metric-unit">Cadencia</div>
+                  <div className="sec-metric-unit">{t('player.cadence')}</div>
                   <div className="sec-metric-val">
                     {telemetry.cadenceRpm || 0}
                     {snapshot.block?.cadenceTarget && (
@@ -1306,7 +1313,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
                 >
                   <div>
-                    <div className="sec-metric-unit">Velocidad</div>
+                    <div className="sec-metric-unit">{t('player.speed')}</div>
                     <div className="sec-metric-val">
                       {(telemetry.speedKmh || 0).toFixed(1)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
@@ -1323,7 +1330,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
                 >
                   <div>
-                    <div className="sec-metric-unit">Distancia</div>
+                    <div className="sec-metric-unit">{t('player.distance')}</div>
                     <div className="sec-metric-val">
                       {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
@@ -1344,7 +1351,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               >
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 48 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
-                    <div className="sec-metric-unit">Pulso Cardíaco</div>
+                    <div className="sec-metric-unit">{t('player.heartRate')}</div>
                     {hrZoneInfo && (
                       <span
                         style={{
@@ -1368,7 +1375,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
                     )}
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>ppm</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>{t('player.bpmUnit')}</span>
                   </div>
                 </div>
                 <Heart
@@ -1391,13 +1398,13 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
                 <div>
-                  <div className="sec-metric-unit">Energía Quemada</div>
+                  <div className="sec-metric-unit">{t('player.energyBurned')}</div>
                   <div className="sec-metric-val" style={{ color: '#fb923c' }}>
                     {liveEnergy.kcal}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 4 }}>kcal</span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
-                    {liveEnergy.workKj} kJ mecánicos
+                    {t('player.mechanicalKj', { kj: liveEnergy.workKj })}
                   </div>
                 </div>
                 <Flame size={26} style={{ color: 'var(--accent-amber)' }} />
@@ -1450,16 +1457,16 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           <button
             className="btn btn-secondary"
             onClick={handlePrevBlock}
-            title="Sector anterior o reiniciar sector actual"
+            title={t('player.prevBlockTitle')}
           >
-            <SkipBack size={18} /> Sector Anterior
+            <SkipBack size={18} /> {t('player.prevBlock')}
           </button>
           <button
             className="btn btn-secondary"
             onClick={handleNextBlock}
-            title="Saltar al siguiente sector"
+            title={t('player.nextBlockTitle')}
           >
-            Saltar Sector <SkipForward size={18} />
+            {t('player.nextBlock')} <SkipForward size={18} />
           </button>
         </div>
 
@@ -1472,15 +1479,15 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
           >
             {isPlaying ? (
               <>
-                <Pause size={22} /> Pausar
+                <Pause size={22} /> {t('player.pause')}
               </>
             ) : isFinished ? (
               <>
-                <RotateCcw size={22} /> Repetir
+                <RotateCcw size={22} /> {t('player.repeat')}
               </>
             ) : (
               <>
-                <Play size={22} fill="currentColor" /> Iniciar Pedaleo
+                <Play size={22} fill="currentColor" /> {t('player.startRide')}
               </>
             )}
           </button>
@@ -1492,7 +1499,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             onClick={handleEndEarly}
             disabled={recordedSamples.length < 5 && elapsedSec < 5}
           >
-            <Square size={16} /> Terminar Sesión
+            <Square size={16} /> {t('player.endSession')}
           </button>
         </div>
       </div>
@@ -1504,7 +1511,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
             <div className="modal-header">
               <div className="modal-title">
                 <CheckCircle2 size={24} style={{ color: 'var(--accent-emerald)' }} />
-                <span>¡Entrenamiento Completado!</span>
+                <span>{t('player.workoutCompletedTitle')}</span>
               </div>
               <button
                 className="btn btn-ghost btn-icon"
@@ -1527,7 +1534,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   {workout.name}
                 </h2>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  Tiempo total completado:{' '}
+                  {t('player.totalTimeCompleted')}{' '}
                   <strong style={{ color: 'var(--accent-cyan)' }}>
                     {formatTime(Math.floor(elapsedSec))}
                   </strong>
@@ -1552,7 +1559,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Vatios Medios
+                    {t('player.avgWatts')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff' }}>
                     {summaryStats.avgW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
@@ -1571,7 +1578,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Vatios Máximos
+                    {t('player.maxWatts')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8' }}>
                     {summaryStats.maxW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
@@ -1587,13 +1594,13 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Energía Quemada
+                    {t('player.energyBurned')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fb923c' }}>
                     {summaryStats.kcal} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>kcal</span>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-                    {summaryStats.workKj} kJ mecánicos
+                    {t('player.mechanicalKj', { kj: summaryStats.workKj })}
                   </div>
                 </div>
 
@@ -1606,7 +1613,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Cadencia Media
+                    {t('player.avgCadence')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#a78bfa' }}>
                     {summaryStats.avgCad} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>RPM</span>
@@ -1622,7 +1629,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Distancia Recorrida
+                    {t('player.distanceCovered')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>
                     {summaryStats.totalDistKm}{' '}
@@ -1639,13 +1646,13 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Pulso Cardíaco
+                    {t('player.heartRate')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f87171' }}>
                     {summaryStats.avgHr ? (
                       <>
                         {summaryStats.avgHr}{' '}
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ppm</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('player.bpmUnit')}</span>
                       </>
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
@@ -1653,7 +1660,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   </div>
                   {summaryStats.maxHr && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                      Máx: {summaryStats.maxHr} ppm
+                      {t('player.maxHr', { hr: summaryStats.maxHr })}
                     </div>
                   )}
                 </div>
@@ -1669,7 +1676,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               {garminUploadState === 'uploading' && (
                 <div className="alert-box alert-cyan" style={{ marginBottom: 16 }}>
                   <Loader2 size={18} className="spin" />
-                  <span>Subiendo sesión a Garmin Connect...</span>
+                  <span>{t('player.garminUploading')}</span>
                 </div>
               )}
 
@@ -1679,8 +1686,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     <CheckCircle2 size={18} />
                     <span className="garmin-success-badge">
                       {garminResult.duplicate
-                        ? 'Ya existía en Garmin Connect'
-                        : '¡Subida a Garmin Connect!'}
+                        ? t('player.garminDuplicate')
+                        : t('player.garminUploaded')}
                     </span>
                   </div>
                   {garminResult.activityUrl && (
@@ -1691,7 +1698,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                         window.electronAPI?.openExternalUrl(garminResult.activityUrl!)
                       }
                     >
-                      Ver en Garmin Connect <ExternalLink size={14} />
+                      {t('player.garminViewOn')} <ExternalLink size={14} />
                     </button>
                   )}
                 </div>
@@ -1703,9 +1710,8 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                     <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
                     <span>
                       {garminResult.needsRelogin
-                        ? garminResult.error ||
-                          'Tu sesión de Garmin Connect ha caducado. Vuelve a conectarte para subir la sesión.'
-                        : garminResult.error || 'Error al subir la sesión a Garmin Connect.'}
+                        ? garminResult.error || t('player.garminSessionExpired')
+                        : garminResult.error || t('player.garminUploadError')}
                     </span>
                   </div>
                   {garminResult.needsRelogin && (
@@ -1715,7 +1721,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                       style={{ padding: '7px 12px', fontSize: '0.82rem', alignSelf: 'flex-end' }}
                       onClick={() => handleUploadToGarmin(true)}
                     >
-                      Re-conectar y subir
+                      {t('player.garminReconnectAndUpload')}
                     </button>
                   )}
                 </div>
@@ -1732,11 +1738,11 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   >
                     {garminUploadState === 'uploading' ? (
                       <>
-                        <Loader2 size={18} className="spin" /> Subiendo a Garmin Connect...
+                        <Loader2 size={18} className="spin" /> {t('player.garminUploading')}
                       </>
                     ) : (
                       <>
-                        <Upload size={18} /> Subir a Garmin Connect
+                        <Upload size={18} /> {t('player.garminUploadBtn')}
                       </>
                     )}
                   </button>
@@ -1746,14 +1752,14 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   style={{ padding: '12px', fontSize: '0.95rem' }}
                   onClick={handleExportTcx}
                 >
-                  <Download size={18} /> Guardar .TCX (Strava / Garmin Connect)
+                  <Download size={18} /> {t('player.saveTcx')}
                 </button>
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '12px', fontSize: '0.95rem' }}
                   onClick={handleExportFit}
                 >
-                  <Download size={18} /> Guardar .FIT
+                  <Download size={18} /> {t('player.saveFit')}
                 </button>
               </div>
             </div>
@@ -1766,7 +1772,7 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
                   onExit();
                 }}
               >
-                Volver a la Biblioteca
+                {t('player.backToLibrary')}
               </button>
             </div>
           </div>

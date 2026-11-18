@@ -136,6 +136,43 @@ body {
   gap: 14px;
 }
 
+/* Language segmented toggle */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.lang-toggle-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  line-height: 1.2;
+}
+
+.lang-toggle-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-surface-hover);
+}
+
+.lang-toggle-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent-cyan);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
 /* FTP quick inline editor */
 .ftp-badge-pill {
   display: flex;
