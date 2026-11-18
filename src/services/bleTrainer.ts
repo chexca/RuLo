@@ -71,6 +71,10 @@ interface BleNavigator {
   };
 }
 
+export const BLE_TELEMETRY_TIMEOUT_MS = 3000;
+export const BLE_HR_EXPIRY_MS = 6000;
+export const BLE_WATCHDOG_INTERVAL_MS = 500;
+
 export class BleTrainerService {
   private device: BleDevice | null = null;
   private isConnected = false;
@@ -92,8 +96,92 @@ export class BleTrainerService {
   private currentDistanceMeters = 0;
   private currentHeartRateBpm = 0;
   private lastTelemetryTime = 0;
+  private lastPedalPacketTime = 0;
+  private lastHrPacketTime = 0;
+  private lastTacxEventCount: number | undefined = undefined;
+  private lastTacxAccumPower: number | undefined = undefined;
 
   private keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+  private watchdogInterval: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Returns current HR BPM only if valid and received within the last 6000 ms.
+   */
+  public getValidHrBpm(now: number = Date.now()): number | undefined {
+    if (this.currentHeartRateBpm <= 0 || this.lastHrPacketTime <= 0) {
+      return undefined;
+    }
+    if (now - this.lastHrPacketTime > BLE_HR_EXPIRY_MS) {
+      return undefined;
+    }
+    return this.currentHeartRateBpm;
+  }
+
+  public startWatchdog(): void {
+    if (this.watchdogInterval) return;
+    this.watchdogInterval = setInterval(() => {
+      this.runWatchdogTick(Date.now());
+    }, BLE_WATCHDOG_INTERVAL_MS);
+  }
+
+  public stopWatchdog(): void {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+    }
+  }
+
+  /**
+   * Checks for BLE telemetry silence (> 3000 ms) and HR expiry (> 6000 ms).
+   */
+  public runWatchdogTick(now: number = Date.now()): void {
+    if (!this.isConnected && !this.onTelemetryCb) return;
+
+    let hrJustExpired = false;
+    if (
+      this.currentHeartRateBpm > 0 &&
+      (this.lastHrPacketTime <= 0 || now - this.lastHrPacketTime > BLE_HR_EXPIRY_MS)
+    ) {
+      this.currentHeartRateBpm = 0;
+      hrJustExpired = true;
+    }
+
+    const refPedalTime =
+      this.lastPedalPacketTime > 0 ? this.lastPedalPacketTime : this.lastTelemetryTime;
+    const pedalingTimedOut =
+      refPedalTime > 0 && now - refPedalTime > BLE_TELEMETRY_TIMEOUT_MS;
+
+    if (pedalingTimedOut) {
+      const hadNonZero =
+        this.currentPowerWatts > 0 ||
+        this.currentCadenceRpm > 0 ||
+        this.currentSpeedKmh > 0;
+
+      this.currentPowerWatts = 0;
+      this.currentCadenceRpm = 0;
+      this.currentSpeedKmh = 0;
+
+      if (hadNonZero || hrJustExpired) {
+        this.emitWatchdogTelemetry(now);
+      }
+    } else if (hrJustExpired) {
+      this.emitWatchdogTelemetry(now);
+    }
+  }
+
+  private emitWatchdogTelemetry(now: number = Date.now()): void {
+    this.lastTelemetryTime = now;
+    const telemetry: TrainerTelemetry = {
+      timestamp: now,
+      powerWatts: Math.round(this.currentPowerWatts),
+      targetWatts: Math.round(this.currentTargetWatts),
+      cadenceRpm: Math.round(this.currentCadenceRpm),
+      speedKmh: Number(this.currentSpeedKmh.toFixed(1)),
+      distanceMeters: Math.round(this.currentDistanceMeters),
+      heartRateBpm: this.getValidHrBpm(now),
+    };
+    this.onTelemetryCb?.(telemetry);
+  }
 
   /**
    * Connects to a smart trainer using Web Bluetooth.
@@ -157,6 +245,10 @@ export class BleTrainerService {
       this.hasTacxPower = false;
       this.currentDistanceMeters = 0;
       this.lastTelemetryTime = Date.now();
+      this.lastPedalPacketTime = Date.now();
+      this.lastHrPacketTime = 0;
+      this.lastTacxEventCount = undefined;
+      this.lastTacxAccumPower = undefined;
 
       // 1. Try FTMS (0x1826)
       let ftmsSupported = false;
@@ -242,7 +334,8 @@ export class BleTrainerService {
           const char = e.target as BleRemoteGATTCharacteristic;
           if (char.value && char.value.byteLength >= 4) {
             if (!this.hasFtmsPower && !this.hasTacxPower) {
-              this.currentPowerWatts = char.value.getInt16(2, true);
+              this.currentPowerWatts = Math.max(0, char.value.getInt16(2, true));
+              this.lastPedalPacketTime = Date.now();
               this.emitTelemetry();
             }
           }
@@ -260,7 +353,11 @@ export class BleTrainerService {
           const char = e.target as BleRemoteGATTCharacteristic;
           if (char.value && char.value.byteLength >= 2) {
             const flags = char.value.getUint8(0);
-            this.currentHeartRateBpm = (flags & 0x01) === 0 ? char.value.getUint8(1) : char.value.getUint16(1, true);
+            const bpm = (flags & 0x01) === 0 ? char.value.getUint8(1) : char.value.getUint16(1, true);
+            if (bpm > 0 && bpm < 250) {
+              this.currentHeartRateBpm = bpm;
+              this.lastHrPacketTime = Date.now();
+            }
             this.emitTelemetry();
           }
         });
@@ -276,6 +373,9 @@ export class BleTrainerService {
           this.setTargetPower(this.currentTargetWatts).catch(() => {});
         }
       }, 2000);
+
+      // Watchdog: 3000ms telemetry silence & 6000ms HR expiry
+      this.startWatchdog();
 
       onStateChange({
         transport: 'ble',
@@ -331,6 +431,7 @@ export class BleTrainerService {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
     }
+    this.stopWatchdog();
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
     }
@@ -342,12 +443,21 @@ export class BleTrainerService {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
     }
+    this.stopWatchdog();
     const wasConnected = this.isConnected;
     this.isConnected = false;
     this.ftmsControlPoint = null;
     this.tacxTxChar = null;
     this.hasFtmsPower = false;
     this.hasTacxPower = false;
+    this.currentPowerWatts = 0;
+    this.currentCadenceRpm = 0;
+    this.currentSpeedKmh = 0;
+    this.currentHeartRateBpm = 0;
+    this.lastPedalPacketTime = 0;
+    this.lastHrPacketTime = 0;
+    this.lastTacxEventCount = undefined;
+    this.lastTacxAccumPower = undefined;
 
     if (wasConnected && this.onStateChangeCb) {
       this.onStateChangeCb({
@@ -363,6 +473,7 @@ export class BleTrainerService {
    */
   private handleFtmsBikeData(dataView: DataView): void {
     if (dataView.byteLength < 2) return;
+    const now = Date.now();
     const flags = dataView.getUint16(0, true);
     let offset = 2;
 
@@ -413,7 +524,7 @@ export class BleTrainerService {
     // Instantaneous Power: present if bit 6 is 1 (int16LE Watts)
     if (flags & 0x0040) {
       if (offset + 2 <= dataView.byteLength) {
-        this.currentPowerWatts = dataView.getInt16(offset, true);
+        this.currentPowerWatts = Math.max(0, dataView.getInt16(offset, true));
         this.hasFtmsPower = true;
         offset += 2;
       }
@@ -432,11 +543,16 @@ export class BleTrainerService {
     // Heart Rate: present if bit 9 is 1 (uint8 BPM)
     if (flags & 0x0200) {
       if (offset + 1 <= dataView.byteLength) {
-        this.currentHeartRateBpm = dataView.getUint8(offset);
+        const hr = dataView.getUint8(offset);
+        if (hr > 0 && hr < 250) {
+          this.currentHeartRateBpm = hr;
+          this.lastHrPacketTime = now;
+        }
         offset += 1;
       }
     }
 
+    this.lastPedalPacketTime = now;
     this.emitTelemetry();
   }
 
@@ -444,6 +560,7 @@ export class BleTrainerService {
    * Parses Tacx FE-C over BLE RX notification stream.
    */
   private handleTacxFecRx(dataView: DataView): void {
+    const now = Date.now();
     const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
 
     for (let i = 0; i < bytes.length; i++) {
@@ -456,19 +573,61 @@ export class BleTrainerService {
             const dataPage = payload[0];
             if (dataPage === 0x19 && payload.length >= 7) {
               // Page 0x19 (25): Specific Trainer Data
-              if (payload[2] < 254) {
-                this.currentCadenceRpm = payload[2];
+              const eventCount = payload[1];
+              const cadenceByte = payload[2];
+              const accumPower = payload[3] | (payload[4] << 8);
+              const rawPower = payload[5] | ((payload[6] & 0x0f) << 8);
+
+              const eventChanged = eventCount !== this.lastTacxEventCount;
+              const accumChanged = accumPower !== this.lastTacxAccumPower;
+              const zeroAccumOnNewEvent =
+                eventChanged &&
+                this.lastTacxAccumPower !== undefined &&
+                accumPower === this.lastTacxAccumPower;
+
+              this.lastTacxEventCount = eventCount;
+              this.lastTacxAccumPower = accumPower;
+
+              if (cadenceByte < 254) {
+                this.currentCadenceRpm = cadenceByte;
+              } else if (zeroAccumOnNewEvent) {
+                this.currentCadenceRpm = 0;
               }
-              this.currentPowerWatts = payload[5] | ((payload[6] & 0x0f) << 8);
+
+              this.currentPowerWatts =
+                rawPower === 0x0fff || zeroAccumOnNewEvent ? 0 : rawPower;
               this.hasTacxPower = true;
+
+              if ((eventChanged || accumChanged) && (this.currentPowerWatts > 0 || this.currentCadenceRpm > 0)) {
+                this.lastPedalPacketTime = now;
+              } else if (
+                this.lastPedalPacketTime > 0 &&
+                now - this.lastPedalPacketTime > BLE_TELEMETRY_TIMEOUT_MS
+              ) {
+                this.currentPowerWatts = 0;
+                this.currentCadenceRpm = 0;
+                this.currentSpeedKmh = 0;
+              }
               this.emitTelemetry();
             } else if (dataPage === 0x10 && payload.length >= 7) {
               // Page 0x10 (16): General FE Data
               const speedRaw = payload[4] | (payload[5] << 8);
               const speedMps = speedRaw / 1000;
-              this.currentSpeedKmh = speedMps * 3.6;
-              if (payload[6] < 255 && payload[6] > 0) {
+              const pedalingTimedOut =
+                this.lastPedalPacketTime > 0 &&
+                now - this.lastPedalPacketTime > BLE_TELEMETRY_TIMEOUT_MS;
+
+              if (pedalingTimedOut) {
+                this.currentPowerWatts = 0;
+                this.currentCadenceRpm = 0;
+                this.currentSpeedKmh = 0;
+              } else {
+                this.currentSpeedKmh = speedMps * 3.6;
+              }
+
+              if (payload[6] < 250 && payload[6] > 0) {
                 this.currentHeartRateBpm = payload[6];
+                this.lastHrPacketTime = now;
               }
               this.emitTelemetry();
             }
@@ -513,7 +672,7 @@ export class BleTrainerService {
       cadenceRpm: Math.round(this.currentCadenceRpm),
       speedKmh: Number(this.currentSpeedKmh.toFixed(1)),
       distanceMeters: Math.round(this.currentDistanceMeters),
-      heartRateBpm: this.currentHeartRateBpm > 0 ? this.currentHeartRateBpm : undefined
+      heartRateBpm: this.getValidHrBpm(now),
     };
 
     this.onTelemetryCb?.(telemetry);

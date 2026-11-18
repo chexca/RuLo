@@ -52,6 +52,7 @@ import {
   getNextZoneMinWatts,
   getPrevZoneMinWatts,
   formatTime,
+  estimateVirtualSpeedKmh,
   computeRecordedKcal,
   getHrZone,
   HrZoneInfo,
@@ -133,6 +134,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [distanceMeters, setDistanceMeters] = useState(0);
+  const [, setStaleTick] = useState(0);
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
@@ -291,6 +294,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const elapsedSecRef = useRef(elapsedSec);
   elapsedSecRef.current = elapsedSec;
 
+  const distanceMetersRef = useRef(0);
+
+  const weightKgRef = useRef(weightKg);
+  weightKgRef.current = weightKg;
+
   const ergEnabledRef = useRef(ergEnabled);
   ergEnabledRef.current = ergEnabled;
 
@@ -299,6 +307,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const telemetryRef = useRef(telemetry);
   telemetryRef.current = telemetry;
+
+  const lastHrPacketMsRef = useRef<number>(
+    telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? telemetry.timestamp || Date.now() : 0
+  );
 
   const lastRecordedSecRef = useRef<number>(-1);
   const lastWallTimeRef = useRef<number | null>(null);
@@ -322,46 +334,97 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   useEffect(() => {
     const now = telemetry.timestamp || Date.now();
     const w = telemetry.powerWatts || 0;
+    const cad = telemetry.cadenceRpm || 0;
 
-    powerBufferRef.current.push({ t: now, w });
-    const cutoff = now - 10000;
-    powerBufferRef.current = powerBufferRef.current.filter((sample) => sample.t >= cutoff);
+    if (w <= 0 && cad <= 0) {
+      powerBufferRef.current = [];
+    } else {
+      const lastSample = powerBufferRef.current[powerBufferRef.current.length - 1];
+      if (lastSample && now - lastSample.t > 3000) {
+        powerBufferRef.current = [];
+      }
+      powerBufferRef.current.push({ t: now, w });
+      const cutoff = now - 10000;
+      powerBufferRef.current = powerBufferRef.current.filter((sample) => sample.t >= cutoff);
+    }
+
+    const hr = telemetry.heartRateBpm;
+    if (typeof hr === 'number' && hr > 0) {
+      lastHrPacketMsRef.current = now;
+    } else {
+      lastHrPacketMsRef.current = 0;
+    }
 
     if (isPlayingRef.current) {
       const acc = secondAccumulatorRef.current;
       acc.sumW += w;
       acc.n += 1;
 
-      const cad = telemetry.cadenceRpm;
       if (typeof cad === 'number' && cad > 0) {
         acc.sumCad += cad;
         acc.nCad += 1;
       }
 
-      const hr = telemetry.heartRateBpm;
       if (typeof hr === 'number' && hr > 0) {
         acc.sumHr += hr;
         acc.nHr += 1;
       }
     }
+
+    const timer3s = setTimeout(() => {
+      setStaleTick(Date.now());
+    }, 3050);
+    const timer6s = setTimeout(() => {
+      setStaleTick(Date.now());
+    }, 6100);
+
+    return () => {
+      clearTimeout(timer3s);
+      clearTimeout(timer6s);
+    };
   }, [telemetry.timestamp, telemetry.powerWatts, telemetry.cadenceRpm, telemetry.heartRateBpm]);
 
-  // Smoothed power for UI display
+  // Smoothed power for UI display with 3000ms stale fallback
   const smoothingSec = powerSmoothingSec ?? 3;
-  const displayWatts = useMemo(() => {
-    const rawWatts = telemetry.powerWatts || 0;
-    if (smoothingSec === 0) {
+  const smoothingSecRef = useRef(smoothingSec);
+  smoothingSecRef.current = smoothingSec;
+
+  const computeSmoothedWatts = (nowMs: number, curTelem: TrainerTelemetry, smoothWindowSec: number): number => {
+    if (!curTelem.timestamp || nowMs - curTelem.timestamp > 3000) {
+      return 0;
+    }
+    const rawWatts = curTelem.powerWatts || 0;
+    if (rawWatts <= 0 && (curTelem.cadenceRpm || 0) <= 0) {
+      return 0;
+    }
+    if (smoothWindowSec === 0) {
       return Math.round(rawWatts);
     }
-    const now = telemetry.timestamp || Date.now();
-    const windowStart = now - smoothingSec * 1000;
+    const refTime = curTelem.timestamp || nowMs;
+    const windowStart = refTime - smoothWindowSec * 1000;
     const samples = powerBufferRef.current.filter((s) => s.t >= windowStart);
     if (samples.length === 0) {
       return Math.round(rawWatts);
     }
     const sum = samples.reduce((acc, s) => acc + s.w, 0);
     return Math.round(sum / samples.length);
-  }, [telemetry.timestamp, telemetry.powerWatts, smoothingSec]);
+  };
+
+  const nowRenderMs = Date.now();
+  const isTelemetryStale = !telemetry.timestamp || nowRenderMs - telemetry.timestamp > 3000;
+  const isHrStale =
+    !telemetry.heartRateBpm ||
+    telemetry.heartRateBpm <= 0 ||
+    !lastHrPacketMsRef.current ||
+    nowRenderMs - lastHrPacketMsRef.current > 6000;
+
+  const displayWatts = computeSmoothedWatts(nowRenderMs, telemetry, smoothingSec);
+  const displayCadence = isTelemetryStale ? 0 : telemetry.cadenceRpm || 0;
+  const displayHeartRateBpm = isHrStale ? undefined : telemetry.heartRateBpm;
+  const liveSpeedKmh =
+    isPlaying && !isFinished && displayWatts > 0
+      ? estimateVirtualSpeedKmh(displayWatts, weightKg)
+      : 0;
 
   const handleCycleSmoothing = () => {
     const current = powerSmoothingSec ?? 3;
@@ -405,6 +468,16 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       const deltaSec = (now - last) / 1000;
       lastWallTimeRef.current = now;
 
+      const curTelem = telemetryRef.current;
+      const tickWatts = computeSmoothedWatts(now, curTelem, smoothingSecRef.current);
+      const speedKmh =
+        tickWatts > 0 ? estimateVirtualSpeedKmh(tickWatts, weightKgRef.current) : 0;
+
+      if (deltaSec > 0) {
+        distanceMetersRef.current += (speedKmh / 3.6) * deltaSec;
+        setDistanceMeters(distanceMetersRef.current);
+      }
+
       const nextElapsed = elapsedSecRef.current + deltaSec;
       const currentSec = Math.floor(nextElapsed);
 
@@ -413,15 +486,25 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
       if (currentSec !== lastRecordedSecRef.current) {
         lastRecordedSecRef.current = currentSec;
-        const curTelem = telemetryRef.current;
+        const isStaleNow = !curTelem.timestamp || now - curTelem.timestamp > 3000;
+        const isHrStaleNow =
+          !curTelem.heartRateBpm ||
+          curTelem.heartRateBpm <= 0 ||
+          !lastHrPacketMsRef.current ||
+          now - lastHrPacketMsRef.current > 6000;
         const acc = secondAccumulatorRef.current;
 
-        const recPower = acc.n > 0 ? Math.round(acc.sumW / acc.n) : (curTelem.powerWatts || 0);
+        const recPower =
+          acc.n > 0
+            ? Math.round(acc.sumW / acc.n)
+            : isStaleNow
+            ? 0
+            : curTelem.powerWatts || 0;
 
         let recCadence: number;
         if (acc.nCad > 0) {
           recCadence = Math.round(acc.sumCad / acc.nCad);
-        } else if (acc.n > 0) {
+        } else if (acc.n > 0 || isStaleNow) {
           recCadence = 0;
         } else {
           recCadence = curTelem.cadenceRpm || 0;
@@ -430,9 +513,15 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
         let recHr: number | undefined;
         if (acc.nHr > 0) {
           recHr = Math.round(acc.sumHr / acc.nHr);
+        } else if (!isHrStaleNow && curTelem.heartRateBpm && curTelem.heartRateBpm > 0) {
+          recHr = curTelem.heartRateBpm;
         } else {
-          recHr = curTelem.heartRateBpm && curTelem.heartRateBpm > 0 ? curTelem.heartRateBpm : undefined;
+          recHr = undefined;
         }
+
+        const recSpeedKmh =
+          recPower > 0 ? estimateVirtualSpeedKmh(recPower, weightKgRef.current) : 0;
+        const recDistanceMeters = Number(distanceMetersRef.current.toFixed(2));
 
         secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
 
@@ -444,8 +533,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             powerWatts: recPower,
             targetWatts: ergEnabledRef.current ? targetWattsRef.current : 0,
             cadenceRpm: recCadence,
-            speedKmh: curTelem.speedKmh || 0,
-            distanceMeters: curTelem.distanceMeters || 0,
+            speedKmh: recSpeedKmh,
+            distanceMeters: recDistanceMeters,
             heartRateBpm: recHr,
           },
         ]);
@@ -463,6 +552,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const handleTogglePlay = () => {
     if (isFinished) {
       setElapsedSec(0);
+      elapsedSecRef.current = 0;
+      distanceMetersRef.current = 0;
+      setDistanceMeters(0);
       setIsFinished(false);
       setRecordedSamples([]);
       setExportMessage(null);
@@ -476,6 +568,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
       setIsPlaying(true);
       return;
+    }
+    if (!isPlaying && elapsedSecRef.current === 0) {
+      distanceMetersRef.current = 0;
+      setDistanceMeters(0);
     }
     setIsPlaying(!isPlaying);
   };
@@ -766,11 +862,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   }, [recordedSamples]);
 
   const hrZoneInfo: HrZoneInfo | null = useMemo(() => {
-    if (telemetry.heartRateBpm && telemetry.heartRateBpm > 0) {
-      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr, lang);
+    if (displayHeartRateBpm && displayHeartRateBpm > 0) {
+      return getHrZone(displayHeartRateBpm, maxHr, restingHr, lang);
     }
     return null;
-  }, [telemetry.heartRateBpm, maxHr, restingHr, lang]);
+  }, [displayHeartRateBpm, maxHr, restingHr, lang]);
 
   // Post-ride summary calculations
   const summaryStats = useMemo(() => {
@@ -1383,7 +1479,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 <div>
                   <div className="sec-metric-unit">{t('player.cadence')}</div>
                   <div className="sec-metric-val">
-                    {telemetry.cadenceRpm || 0}
+                    {displayCadence}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>RPM</span>
                   </div>
                 </div>
@@ -1403,7 +1499,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   <div>
                     <div className="sec-metric-unit">{t('player.speed')}</div>
                     <div className="sec-metric-val">
-                      {(telemetry.speedKmh || 0).toFixed(1)}
+                      {liveSpeedKmh.toFixed(1)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
                     </div>
                   </div>
@@ -1420,7 +1516,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   <div>
                     <div className="sec-metric-unit">{t('player.distance')}</div>
                     <div className="sec-metric-val">
-                      {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
+                      {(distanceMeters / 1000).toFixed(2)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
                     </div>
                   </div>
@@ -1458,8 +1554,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     )}
                   </div>
                   <div className="sec-metric-val">
-                    {telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? (
-                      telemetry.heartRateBpm
+                    {displayHeartRateBpm && displayHeartRateBpm > 0 ? (
+                      displayHeartRateBpm
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
                     )}
@@ -1469,7 +1565,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 <Heart
                   size={26}
                   style={{
-                    color: telemetry.heartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
+                    color: displayHeartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
                     flexShrink: 0,
                     marginLeft: 8,
                   }}
