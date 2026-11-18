@@ -91,6 +91,16 @@ export const es = {
   'app.library.editTitle': 'Editar entrenamiento',
   'app.library.duplicateTitle': 'Duplicar entrenamiento',
   'app.library.deleteTitle': 'Eliminar de la biblioteca',
+
+  // Built-in preset workouts
+  'app.preset.w-sweet-spot-3x10.name': 'Sweet Spot 3x10 min',
+  'app.preset.w-sweet-spot-3x10.desc': 'Tres series de 10 minutos al 90% FTP para construir base aeróbica sólida y elevar el umbral sin fatiga excesiva.',
+  'app.preset.w-vo2-5x3.name': 'VO2 Max 5x3 min (Z5)',
+  'app.preset.w-vo2-5x3.desc': 'Intervalos cortos e intensos al 115% de FTP para potenciar el consumo máximo de oxígeno y tolerancia al lactato.',
+  'app.preset.w-ftp-test-20.name': 'Test FTP 20 min (Protocolo Estándar)',
+  'app.preset.w-ftp-test-20.desc': 'Test clásico para calibrar tu FTP: 20 min al 100% tras vaciado de anaeróbico. Tu nuevo FTP será el 95% de la media sostenida.',
+  'app.preset.w-endurance-60.name': 'Resistencia Aeróbica Z2 (60 min)',
+  'app.preset.w-endurance-60.desc': 'Entrenamiento continuo en Zona 2 para optimizar la eficiencia metabólica y el uso de grasas como combustible.',
 } as const;
 
 export const en: Record<keyof typeof es, string> = {
@@ -186,4 +196,14 @@ export const en: Record<keyof typeof es, string> = {
   'app.library.editTitle': 'Edit workout',
   'app.library.duplicateTitle': 'Duplicate workout',
   'app.library.deleteTitle': 'Delete from library',
+
+  // Built-in preset workouts
+  'app.preset.w-sweet-spot-3x10.name': 'Sweet Spot 3x10 min',
+  'app.preset.w-sweet-spot-3x10.desc': 'Three 10-minute intervals at 90% FTP to build a solid aerobic base and raise threshold without excessive fatigue.',
+  'app.preset.w-vo2-5x3.name': 'VO2 Max 5x3 min (Z5)',
+  'app.preset.w-vo2-5x3.desc': 'Short, intense intervals at 115% FTP to boost maximal oxygen uptake and lactate tolerance.',
+  'app.preset.w-ftp-test-20.name': '20-min FTP Test (Standard Protocol)',
+  'app.preset.w-ftp-test-20.desc': 'Classic test to calibrate your FTP: 20 min at 100% after anaerobic depletion. Your new FTP will be 95% of your sustained average.',
+  'app.preset.w-endurance-60.name': 'Z2 Aerobic Endurance (60 min)',
+  'app.preset.w-endurance-60.desc': 'Steady Zone 2 ride to optimize metabolic efficiency and fat utilization as fuel.',
 };

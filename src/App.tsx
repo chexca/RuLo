@@ -119,6 +119,33 @@ const SEEDED_WORKOUTS: Workout[] = [
   },
 ];
 
+const SEEDED_WORKOUT_DEFAULTS = new Map(
+  SEEDED_WORKOUTS.map((w) => [w.id, { name: w.name, description: w.description ?? '' }])
+);
+
+/**
+ * Returns localized title and description for built-in preset workouts unless the user customized them.
+ */
+function getLocalizedWorkoutText(
+  workout: Workout,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): { name: string; description: string } {
+  const preset = SEEDED_WORKOUT_DEFAULTS.get(workout.id);
+  if (!preset) {
+    return {
+      name: workout.name,
+      description: workout.description || t('app.library.defaultDesc'),
+    };
+  }
+  return {
+    name: workout.name === preset.name ? t(`app.preset.${workout.id}.name`) : workout.name,
+    description:
+      (workout.description ?? '') === preset.description
+        ? t(`app.preset.${workout.id}.desc`)
+        : workout.description || t('app.library.defaultDesc'),
+  };
+}
+
 const DEFAULT_SETTINGS: UserSettings = {
   ftp: 240,
   weightKg: 72,
@@ -1198,16 +1225,17 @@ export const App: React.FC = () => {
         <div className="library-grid">
           {workouts.map((workout) => {
             const stats = computeWorkoutStats(workout, settings.ftp);
+            const { name: displayName, description: displayDesc } = getLocalizedWorkoutText(workout, t);
 
             return (
               <div key={workout.id} className="card workout-card">
                 <div>
                   <div className="workout-card-header">
-                    <h3 className="workout-name">{workout.name}</h3>
+                    <h3 className="workout-name">{displayName}</h3>
                   </div>
 
                   <p className="workout-desc">
-                    {workout.description || t('app.library.defaultDesc')}
+                    {displayDesc}
                   </p>
 
                   {/* Mini Preview Chart */}

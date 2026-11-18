@@ -44,6 +44,7 @@ import {
 } from '../types/workout';
 import {
   getPowerZone,
+  getPowerZoneLabel,
   getPowerZoneThresholds,
   getNextZoneMinWatts,
   getPrevZoneMinWatts,
@@ -564,9 +565,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   }, [isFinished, recordedSamples.length, autoUploadGarmin, garminStatus?.connected]);
 
   // Derived zone & live telemetry values
-  const zoneThresholds = useMemo(() => getPowerZoneThresholds(ftp), [ftp]);
-  const zoneInfo = getPowerZone(displayWatts, ftp);
-  const targetZoneInfo = getPowerZone(targetWatts, ftp);
+  const zoneThresholds = useMemo(() => getPowerZoneThresholds(ftp, lang), [ftp, lang]);
+  const zoneInfo = getPowerZone(displayWatts, ftp, lang);
+  const targetZoneInfo = getPowerZone(targetWatts, ftp, lang);
   const powerDelta = displayWatts - targetWatts;
 
   const liveEnergy = useMemo(() => {
@@ -587,10 +588,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const hrZoneInfo: HrZoneInfo | null = useMemo(() => {
     if (telemetry.heartRateBpm && telemetry.heartRateBpm > 0) {
-      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr);
+      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr, lang);
     }
     return null;
-  }, [telemetry.heartRateBpm, maxHr, restingHr]);
+  }, [telemetry.heartRateBpm, maxHr, restingHr, lang]);
 
   // Post-ride summary calculations
   const summaryStats = useMemo(() => {
@@ -1057,13 +1058,17 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           {/* TILE 1: POTENCIA ACTUAL */}
           {tilePowerVisible && (
             <div className="cockpit-tile cockpit-tile-power">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              <div
+                className="metric-card-header"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                     {t('player.currentPower')}
                   </span>
                   {getFieldMode('power') !== 'blur' && (
                     <span
+                      className="zone-badge"
                       style={{
                         fontSize: '0.72rem',
                         fontWeight: 700,
@@ -1072,14 +1077,15 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                         background: `${zoneInfo.color}25`,
                         color: zoneInfo.color,
                         border: `1px solid ${zoneInfo.color}60`,
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      {zoneInfo.code} · {zoneInfo.name}
+                      {zoneInfo.code} · { getPowerZoneLabel(zoneInfo.zone, lang) }
                     </span>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
                   {ergEnabled && getFieldMode('power') !== 'blur' && (
                     <div
                       style={{
@@ -1092,6 +1098,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                             ? '#38bdf8'
                             : '#f59e0b',
                         fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {t('player.vsTarget', { delta: powerDelta >= 0 ? `+${powerDelta}` : powerDelta })}
