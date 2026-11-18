@@ -44,6 +44,7 @@ import {
 } from '../types/workout';
 import {
   getPowerZone,
+  getPowerZoneLabel,
   getPowerZoneThresholds,
   getNextZoneMinWatts,
   getPrevZoneMinWatts,
@@ -55,6 +56,7 @@ import {
 import { NumericInput } from './NumericInput';
 import { playWorkoutCompleteFanfare } from '../services/soundCue';
 import { generateTcx, generateFitBase64 } from '../services/activityExporter';
+import { useI18n } from '../i18n';
 
 export interface FreeRidePlayerProps {
   ftp: number;
@@ -113,6 +115,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   autoUploadGarmin = false,
   onGarminLogin,
 }) => {
+  const { t, lang } = useI18n();
   const defaultTargetWatts = Math.max(50, Math.round(ftp * 0.6));
 
   const [ergEnabled, setErgEnabled] = useState<boolean>(true);
@@ -192,7 +195,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             e.stopPropagation();
             toggleFieldBlur(key);
           }}
-          title={isBlur ? 'Quitar desenfoque' : 'Desenfocar valor (Blur)'}
+          title={isBlur ? t('player.blurRemove') : t('player.blurValue')}
         >
           <ScanEye size={isSecMetric ? 13 : 15} />
         </button>
@@ -203,7 +206,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             e.stopPropagation();
             hideField(key);
           }}
-          title="Ocultar panel"
+          title={t('player.hidePanel')}
         >
           <EyeOff size={isSecMetric ? 13 : 15} />
         </button>
@@ -405,20 +408,22 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   };
 
   const handleEndSession = () => {
-    if (confirm('¿Deseas finalizar esta sesión de rodaje libre?')) {
+    if (confirm(t('freeride.confirmEnd'))) {
       setIsPlaying(false);
       setIsFinished(true);
       if (soundEnabled) playWorkoutCompleteFanfare();
     }
   };
 
-  const sessionTitle = ergEnabled ? 'Solo Rodar (ERG)' : 'Solo Rodar (Libre)';
+  const sessionTitle = ergEnabled
+    ? t('freeride.sessionTitleErg')
+    : t('freeride.sessionTitleFree');
 
   // Export handlers
   const handleExportTcx = async () => {
     try {
       const tcxContent = generateTcx(sessionTitle, recordedSamples);
-      const defaultFileName = `Solo_Rodar_${new Date().toISOString().slice(0, 10)}.tcx`;
+      const defaultFileName = `${t('freeride.filePrefix')}_${new Date().toISOString().slice(0, 10)}.tcx`;
 
       if (window.electronAPI?.exportActivityFile) {
         const res = await window.electronAPI.exportActivityFile({
@@ -426,9 +431,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           tcxContent,
         });
         if (!res.canceled && !res.error) {
-          setExportMessage(`Archivo .TCX guardado en: ${res.filePath || defaultFileName}`);
+          setExportMessage(t('player.tcxSaved', { path: res.filePath || defaultFileName }));
         } else if (res.error) {
-          alert(`Error al guardar .TCX: ${res.error}`);
+          alert(t('player.tcxSaveError', { error: res.error }));
         }
         return;
       }
@@ -440,16 +445,16 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       a.download = defaultFileName;
       a.click();
       URL.revokeObjectURL(url);
-      setExportMessage('Descarga .TCX iniciada.');
+      setExportMessage(t('player.tcxDownloadStarted'));
     } catch (err) {
-      alert(`Error al generar TCX: ${(err as Error).message}`);
+      alert(t('player.tcxGenError', { error: (err as Error).message }));
     }
   };
 
   const handleExportFit = async () => {
     try {
       const fitBase64 = generateFitBase64(sessionTitle, recordedSamples);
-      const defaultFileName = `Solo_Rodar_${new Date().toISOString().slice(0, 10)}.fit`;
+      const defaultFileName = `${t('freeride.filePrefix')}_${new Date().toISOString().slice(0, 10)}.fit`;
 
       if (window.electronAPI?.exportActivityFile) {
         const res = await window.electronAPI.exportActivityFile({
@@ -458,9 +463,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           fitBase64,
         });
         if (!res.canceled && !res.error) {
-          setExportMessage(`Archivo .FIT guardado en: ${res.filePath || defaultFileName}`);
+          setExportMessage(t('player.fitSaved', { path: res.filePath || defaultFileName }));
         } else if (res.error) {
-          alert(`Error al guardar .FIT: ${res.error}`);
+          alert(t('player.fitSaveError', { error: res.error }));
         }
         return;
       }
@@ -478,9 +483,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       a.download = defaultFileName;
       a.click();
       URL.revokeObjectURL(url);
-      setExportMessage('Descarga .FIT iniciada.');
+      setExportMessage(t('player.fitDownloadStarted'));
     } catch (err) {
-      alert(`Error al generar FIT: ${(err as Error).message}`);
+      alert(t('player.fitGenError', { error: (err as Error).message }));
     }
   };
 
@@ -490,7 +495,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
     try {
       const date = new Date().toISOString().slice(0, 10);
-      const fileName = `Solo_Rodar_${date}.fit`;
+      const fileName = `${t('freeride.filePrefix')}_${date}.fit`;
       const fitBase64 = generateFitBase64(sessionTitle, recordedSamples);
       const tcxContent = generateTcx(sessionTitle, recordedSamples);
 
@@ -499,7 +504,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           setGarminUploadState('error');
           setGarminResult({
             ok: false,
-            error: 'No hay gestor de inicio de sesión de Garmin Connect disponible.',
+            error: t('player.garminNoLoginManager'),
           });
           return;
         }
@@ -508,7 +513,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           setGarminUploadState('error');
           setGarminResult({
             ok: false,
-            error: loginRes.error || 'No se pudo iniciar sesión en Garmin Connect.',
+            error: loginRes.error || t('player.garminLoginFailed'),
           });
           return;
         }
@@ -518,7 +523,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
         setGarminUploadState('error');
         setGarminResult({
           ok: false,
-          error: 'La subida directa a Garmin Connect solo está disponible en la app de escritorio.',
+          error: t('player.garminDesktopOnly'),
         });
         return;
       }
@@ -541,7 +546,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       setGarminUploadState('error');
       setGarminResult({
         ok: false,
-        error: (err as Error).message || 'Error inesperado al subir a Garmin Connect.',
+        error: (err as Error).message || t('player.garminUnexpectedError'),
       });
     }
   };
@@ -560,9 +565,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   }, [isFinished, recordedSamples.length, autoUploadGarmin, garminStatus?.connected]);
 
   // Derived zone & live telemetry values
-  const zoneThresholds = useMemo(() => getPowerZoneThresholds(ftp), [ftp]);
-  const zoneInfo = getPowerZone(displayWatts, ftp);
-  const targetZoneInfo = getPowerZone(targetWatts, ftp);
+  const zoneThresholds = useMemo(() => getPowerZoneThresholds(ftp, lang), [ftp, lang]);
+  const zoneInfo = getPowerZone(displayWatts, ftp, lang);
+  const targetZoneInfo = getPowerZone(targetWatts, ftp, lang);
   const powerDelta = displayWatts - targetWatts;
 
   const liveEnergy = useMemo(() => {
@@ -583,10 +588,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const hrZoneInfo: HrZoneInfo | null = useMemo(() => {
     if (telemetry.heartRateBpm && telemetry.heartRateBpm > 0) {
-      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr);
+      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr, lang);
     }
     return null;
-  }, [telemetry.heartRateBpm, maxHr, restingHr]);
+  }, [telemetry.heartRateBpm, maxHr, restingHr, lang]);
 
   // Post-ride summary calculations
   const summaryStats = useMemo(() => {
@@ -721,7 +726,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       <div className="player-top-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8fafc' }}>
-            Solo Rodar
+            {t('freeride.title')}
           </div>
           <span
             className="brand-badge"
@@ -735,7 +740,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }
             }
           >
-            {ergEnabled ? 'ERG ACTIVO' : 'RODAJE LIBRE'}
+            {ergEnabled ? t('player.ergActive') : t('freeride.badgeFree')}
           </span>
         </div>
 
@@ -744,7 +749,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           <div
             className="connection-pill"
             onClick={onOpenConnectionModal}
-            title="Pulsa para cambiar o reconectar el rodillo"
+            title={t('freeride.trainerPillTitle')}
           >
             <span
               className={`status-dot ${
@@ -763,7 +768,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
               {connectionStatus === 'connected'
                 ? deviceName || 'Tacx Neo 2'
-                : 'Rodillo Desconectado'}
+                : t('player.trainerDisconnected')}
             </span>
           </div>
 
@@ -774,8 +779,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             onClick={toggleNoClockMode}
             title={
               isNoClockActive
-                ? 'Modo Sin Reloj activo (tiempo desenfocado). Clic para volver a ver el reloj.'
-                : 'Activar Modo Sin Reloj (desenfoca el tiempo de rodaje)'
+                ? t('freeride.noClockActiveTitle')
+                : t('freeride.noClockInactiveTitle')
             }
           >
             {isNoClockActive ? (
@@ -783,7 +788,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             ) : (
               <Timer size={16} />
             )}
-            <span>Sin Reloj</span>
+            <span>{t('player.noClock')}</span>
           </button>
 
           {/* Power Smoothing Pill */}
@@ -792,9 +797,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             className="power-smoothing-pill"
             style={{ padding: '7px 11px', fontSize: '0.8rem' }}
             onClick={handleCycleSmoothing}
-            title="Suavizado de potencia mostrada (Inst. / 3s / 5s)"
+            title={t('player.smoothingTitle')}
           >
-            Suavizado: {smoothingSec === 0 ? 'Inst.' : `${smoothingSec}s`}
+            {t('player.smoothing', {
+              val: smoothingSec === 0 ? t('player.smoothingInst') : `${smoothingSec}s`,
+            })}
           </button>
 
           {/* Restore hidden cards button when any card is hidden */}
@@ -804,9 +811,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               className="btn btn-secondary"
               style={{ padding: '7px 11px', fontSize: '0.8rem', color: 'var(--accent-amber)' }}
               onClick={restoreAllFields}
-              title="Mostrar todos los paneles ocultos"
+              title={t('freeride.showHiddenTitle')}
             >
-              <Eye size={15} /> Mostrar ({hiddenFieldsCount})
+              <Eye size={15} /> {t('freeride.showHidden', { count: hiddenFieldsCount })}
             </button>
           )}
 
@@ -814,7 +821,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           <button
             className="btn btn-secondary btn-icon"
             onClick={onToggleSound}
-            title={soundEnabled ? 'Avisos sonoros activados' : 'Avisos sonoros silenciados'}
+            title={soundEnabled ? t('player.soundOn') : t('player.soundOff')}
           >
             {soundEnabled ? (
               <Volume2 size={18} style={{ color: 'var(--accent-cyan)' }} />
@@ -828,7 +835,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             className="btn btn-secondary"
             onClick={() => {
               if (isPlaying) {
-                if (confirm('El rodaje está en curso. ¿Deseas pausar y salir?')) {
+                if (confirm(t('freeride.confirmExitPlaying'))) {
                   setIsPlaying(false);
                   onExit();
                 }
@@ -837,7 +844,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               }
             }}
           >
-            <X size={16} /> Salir
+            <X size={16} /> {t('player.exit')}
           </button>
         </div>
       </div>
@@ -846,14 +853,14 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       <div className="freeride-control-panel">
         <div className="freeride-mode-header">
           {/* Prominent ERG <-> Free Toggle */}
-          <div className="freeride-mode-switch" role="group" aria-label="Modo de resistencia">
+          <div className="freeride-mode-switch" role="group" aria-label={t('freeride.resistanceModeAria')}>
             <button
               type="button"
               className={`freeride-mode-btn ${ergEnabled ? 'is-active-erg' : ''}`}
               onClick={() => setErgEnabled(true)}
             >
               <Zap size={16} />
-              <span>Con ERG (Vatios Fijos)</span>
+              <span>{t('freeride.withErg')}</span>
             </button>
             <button
               type="button"
@@ -861,7 +868,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               onClick={() => setErgEnabled(false)}
             >
               <Wind size={16} />
-              <span>Sin ERG (Rodaje Libre)</span>
+              <span>{t('freeride.withoutErg')}</span>
             </button>
           </div>
 
@@ -869,7 +876,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             <div className="freeride-erg-controls">
               {/* Target Watts Input + Step Buttons */}
               <div className="freeride-target-group">
-                <span className="freeride-target-label">OBJETIVO ERG</span>
+                <span className="freeride-target-label">{t('freeride.ergTarget')}</span>
                 <div className="freeride-target-input-wrap">
                   <NumericInput
                     className="freeride-watts-input"
@@ -878,7 +885,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     max={2000}
                     fallback={defaultTargetWatts}
                     onChange={updateTargetWatts}
-                    title="Escribe los vatios objetivo directamente"
+                    title={t('freeride.targetWattsTitle')}
                   />
                   <span style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>W</span>
                 </div>
@@ -901,7 +908,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 11px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(targetWatts - 10)}
-                  title="Reducir 10 vatios"
+                  title={t('player.reduce10W')}
                 >
                   -10 W
                 </button>
@@ -910,7 +917,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 11px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(targetWatts - 5)}
-                  title="Reducir 5 vatios"
+                  title={t('player.reduce5W')}
                 >
                   -5 W
                 </button>
@@ -919,7 +926,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 11px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(targetWatts + 5)}
-                  title="Añadir 5 vatios"
+                  title={t('player.add5W')}
                 >
                   +5 W
                 </button>
@@ -928,7 +935,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 11px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(targetWatts + 10)}
-                  title="Añadir 10 vatios"
+                  title={t('player.add10W')}
                 >
                   +10 W
                 </button>
@@ -941,18 +948,18 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   className="btn btn-secondary"
                   style={{ padding: '7px 12px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(getPrevZoneMinWatts(targetWatts, ftp))}
-                  title="Saltar a la zona anterior (+10 W sobre el mínimo)"
+                  title={t('freeride.prevZoneTitle')}
                 >
-                  <ChevronLeft size={15} /> Zona -
+                  <ChevronLeft size={15} /> {t('freeride.prevZone')}
                 </button>
                 <button
                   type="button"
                   className="btn btn-primary"
                   style={{ padding: '7px 12px', fontSize: '0.82rem' }}
                   onClick={() => updateTargetWatts(getNextZoneMinWatts(targetWatts, ftp))}
-                  title="Saltar a la zona superior (+10 W sobre el mínimo)"
+                  title={t('freeride.nextZoneTitle')}
                 >
-                  Zona + <ChevronRight size={15} />
+                  {t('freeride.nextZone')} <ChevronRight size={15} />
                 </button>
               </div>
             </div>
@@ -961,7 +968,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             <div className="freeride-free-controls">
               <div className="freeride-resistance-row">
                 <span className="freeride-target-label">
-                  Resistencia base: <strong style={{ color: 'var(--accent-emerald)', fontSize: '1rem' }}>{resistancePct}%</strong>
+                  {t('freeride.baseResistance')}{' '}
+                  <strong style={{ color: 'var(--accent-emerald)', fontSize: '1rem' }}>{resistancePct}%</strong>
                 </span>
                 <input
                   type="range"
@@ -989,10 +997,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               {activeTransport !== 'ant' && (
                 <div className="freeride-free-note">
                   {activeTransport === 'ble'
-                    ? 'En Bluetooth (BLE) ruedas libre sin vatios ERG forzados; usa tus marchas normalmente.'
+                    ? t('freeride.freeNoteBle')
                     : activeTransport === 'simulator'
-                    ? 'En Simulador ruedas libre sin forzar ERG (la resistencia base % aplica al rodillo ANT+ FE-C).'
-                    : 'Sin bloqueo de vatios ERG. Conecta un rodillo ANT+ para ajustar la resistencia base %.'}
+                    ? t('freeride.freeNoteSim')
+                    : t('freeride.freeNoteDefault')}
                 </div>
               )}
             </div>
@@ -1015,7 +1023,13 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     color: isCurrentTargetZone ? '#ffffff' : '#cbd5e1',
                   }}
                   onClick={() => updateTargetWatts(z.jumpWatts)}
-                  title={`${z.code} ${z.name}: saltar a ${z.jumpWatts} W (mín. ${z.minWatts} W, ${z.minPct}% FTP)`}
+                  title={t('freeride.zonePillTitle', {
+                    code: z.code,
+                    name: z.name,
+                    jumpWatts: z.jumpWatts,
+                    minWatts: z.minWatts,
+                    minPct: z.minPct,
+                  })}
                 >
                   <span
                     className="freeride-zone-dot"
@@ -1044,13 +1058,17 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           {/* TILE 1: POTENCIA ACTUAL */}
           {tilePowerVisible && (
             <div className="cockpit-tile cockpit-tile-power">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                    Potencia Actual
+              <div
+                className="metric-card-header"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    {t('player.currentPower')}
                   </span>
                   {getFieldMode('power') !== 'blur' && (
                     <span
+                      className="zone-badge"
                       style={{
                         fontSize: '0.72rem',
                         fontWeight: 700,
@@ -1059,14 +1077,15 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                         background: `${zoneInfo.color}25`,
                         color: zoneInfo.color,
                         border: `1px solid ${zoneInfo.color}60`,
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      {zoneInfo.code} · {zoneInfo.name}
+                      {zoneInfo.code} · { getPowerZoneLabel(zoneInfo.zone, lang) }
                     </span>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
                   {ergEnabled && getFieldMode('power') !== 'blur' && (
                     <div
                       style={{
@@ -1079,9 +1098,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                             ? '#38bdf8'
                             : '#f59e0b',
                         fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      {powerDelta >= 0 ? `+${powerDelta}` : powerDelta} W vs obj
+                      {t('player.vsTarget', { delta: powerDelta >= 0 ? `+${powerDelta}` : powerDelta })}
                     </div>
                   )}
                   {renderCardActions('power')}
@@ -1100,7 +1120,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>W/kg</span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>
-                      Media sesión: <strong style={{ color: '#e2e8f0' }}>{liveAvgWatts} W</strong>
+                      {t('freeride.sessionAvg')} <strong style={{ color: '#e2e8f0' }}>{liveAvgWatts} W</strong>
                     </div>
                   </div>
                 </div>
@@ -1113,7 +1133,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             <div className="cockpit-tile">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Tiempo de Rodaje
+                  {t('freeride.rideTime')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {getFieldMode('sessionTimer') !== 'blur' && (
@@ -1124,7 +1144,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                         color: isPlaying ? 'var(--accent-emerald)' : 'var(--text-muted)',
                       }}
                     >
-                      {isPlaying ? '● En curso' : elapsedSec > 0 ? 'Pausado' : 'Listo'}
+                      {isPlaying
+                        ? t('freeride.statusRunning')
+                        : elapsedSec > 0
+                        ? t('freeride.statusPaused')
+                        : t('freeride.statusReady')}
                     </span>
                   )}
                   {renderCardActions('sessionTimer')}
@@ -1150,13 +1174,15 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <span>
-                    Modo:{' '}
+                    {t('freeride.modeLabel')}{' '}
                     <strong style={{ color: ergEnabled ? 'var(--accent-cyan)' : 'var(--accent-emerald)' }}>
-                      {ergEnabled ? `ERG ${targetWatts} W` : `Libre ${activeTransport === 'ant' ? `(${resistancePct}%)` : ''}`}
+                      {ergEnabled
+                        ? `ERG ${targetWatts} W`
+                        : `${t('freeride.modeFree')} ${activeTransport === 'ant' ? `(${resistancePct}%)` : ''}`}
                     </strong>
                   </span>
                   <span>
-                    FTP ref: <strong style={{ color: '#fff' }}>{ftp} W</strong>
+                    {t('freeride.ftpRef')} <strong style={{ color: '#fff' }}>{ftp} W</strong>
                   </span>
                 </div>
               </div>
@@ -1176,7 +1202,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
                 <div>
-                  <div className="sec-metric-unit">Cadencia</div>
+                  <div className="sec-metric-unit">{t('player.cadence')}</div>
                   <div className="sec-metric-val">
                     {telemetry.cadenceRpm || 0}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>RPM</span>
@@ -1196,7 +1222,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
                 >
                   <div>
-                    <div className="sec-metric-unit">Velocidad</div>
+                    <div className="sec-metric-unit">{t('player.speed')}</div>
                     <div className="sec-metric-val">
                       {(telemetry.speedKmh || 0).toFixed(1)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
@@ -1213,7 +1239,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
                 >
                   <div>
-                    <div className="sec-metric-unit">Distancia</div>
+                    <div className="sec-metric-unit">{t('player.distance')}</div>
                     <div className="sec-metric-val">
                       {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
@@ -1234,7 +1260,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               >
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 48 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
-                    <div className="sec-metric-unit">Pulso Cardíaco</div>
+                    <div className="sec-metric-unit">{t('player.heartRate')}</div>
                     {hrZoneInfo && (
                       <span
                         style={{
@@ -1258,7 +1284,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
                     )}
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>ppm</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>{t('player.bpmUnit')}</span>
                   </div>
                 </div>
                 <Heart
@@ -1281,13 +1307,13 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
                 <div>
-                  <div className="sec-metric-unit">Energía Quemada</div>
+                  <div className="sec-metric-unit">{t('player.energyBurned')}</div>
                   <div className="sec-metric-val" style={{ color: '#fb923c' }}>
                     {liveEnergy.kcal}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 4 }}>kcal</span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
-                    {liveEnergy.workKj} kJ mecánicos
+                    {t('player.mechanicalKj', { kj: liveEnergy.workKj })}
                   </div>
                 </div>
                 <Flame size={26} style={{ color: 'var(--accent-amber)' }} />
@@ -1322,10 +1348,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                <span style={{ fontWeight: 700, color: '#e2e8f0' }}>Potencia en Tiempo Real</span>
+                <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{t('freeride.chartTitle')}</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 12, height: 2, background: '#10b981', display: 'inline-block' }} />
-                  Potencia
+                  {t('freeride.chartLegendPower')}
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 12, borderTop: '2px dashed #f59e0b', display: 'inline-block' }} />
@@ -1334,7 +1360,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 {ergEnabled && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 12, borderTop: '2px dashed #38bdf8', display: 'inline-block' }} />
-                    Objetivo ERG ({targetWatts}W)
+                    {t('freeride.chartLegendTarget', { watts: targetWatts })}
                   </span>
                 )}
               </div>
@@ -1419,7 +1445,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                       fontSize="10"
                       fontWeight="700"
                     >
-                      OBJ {targetWatts}W
+                      {t('freeride.chartTargetShort', { watts: targetWatts })}
                     </text>
                   </>
                 )}
@@ -1449,7 +1475,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     fontSize="13"
                     fontWeight="600"
                   >
-                    Pulsa &quot;Iniciar Pedaleo&quot; para registrar tu curva de potencia en directo
+                    {t('freeride.chartEmptyPrompt')}
                   </text>
                 )}
 
@@ -1483,8 +1509,13 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       <div className="player-controls-bar">
         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
           {ergEnabled
-            ? `ERG activo a ${targetWatts} W (${targetZoneInfo.code})`
-            : `Rodaje Libre · ${activeTransport === 'ant' ? `Resistencia ${resistancePct}%` : 'Sin ERG'}`}
+            ? t('freeride.controlsErgStatus', { watts: targetWatts, code: targetZoneInfo.code })
+            : t('freeride.controlsFreeStatus', {
+                detail:
+                  activeTransport === 'ant'
+                    ? t('freeride.controlsFreeResistance', { pct: resistancePct })
+                    : t('freeride.controlsFreeNoErg'),
+              })}
         </div>
 
         <div>
@@ -1495,19 +1526,19 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           >
             {isPlaying ? (
               <>
-                <Pause size={22} /> Pausar
+                <Pause size={22} /> {t('player.pause')}
               </>
             ) : isFinished ? (
               <>
-                <RotateCcw size={22} /> Repetir
+                <RotateCcw size={22} /> {t('player.repeat')}
               </>
             ) : elapsedSec > 0 ? (
               <>
-                <Play size={22} fill="currentColor" /> Reanudar
+                <Play size={22} fill="currentColor" /> {t('player.resume')}
               </>
             ) : (
               <>
-                <Play size={22} fill="currentColor" /> Iniciar Pedaleo
+                <Play size={22} fill="currentColor" /> {t('player.startRide')}
               </>
             )}
           </button>
@@ -1519,7 +1550,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             onClick={handleEndSession}
             disabled={recordedSamples.length < 1 && elapsedSec < 1}
           >
-            <Square size={16} /> Terminar Sesión
+            <Square size={16} /> {t('player.endSession')}
           </button>
         </div>
       </div>
@@ -1531,7 +1562,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             <div className="modal-header">
               <div className="modal-title">
                 <CheckCircle2 size={24} style={{ color: 'var(--accent-emerald)' }} />
-                <span>¡Sesión de Rodaje Completada!</span>
+                <span>{t('freeride.summaryTitle')}</span>
               </div>
               <button
                 className="btn btn-ghost btn-icon"
@@ -1554,7 +1585,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   {sessionTitle}
                 </h2>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  Tiempo total completado:{' '}
+                  {t('player.totalTimeCompleted')}{' '}
                   <strong style={{ color: 'var(--accent-cyan)' }}>
                     {formatTime(Math.floor(elapsedSec))}
                   </strong>
@@ -1579,7 +1610,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Vatios Medios
+                    {t('player.avgWatts')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff' }}>
                     {summaryStats.avgW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
@@ -1598,7 +1629,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Vatios Máximos
+                    {t('player.maxWatts')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#38bdf8' }}>
                     {summaryStats.maxW} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>W</span>
@@ -1614,13 +1645,13 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Energía Quemada
+                    {t('player.energyBurned')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fb923c' }}>
                     {summaryStats.kcal} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>kcal</span>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-                    {summaryStats.workKj} kJ mecánicos
+                    {t('player.mechanicalKj', { kj: summaryStats.workKj })}
                   </div>
                 </div>
 
@@ -1633,7 +1664,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Cadencia Media
+                    {t('player.avgCadence')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#a78bfa' }}>
                     {summaryStats.avgCad} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>RPM</span>
@@ -1649,7 +1680,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Distancia Recorrida
+                    {t('player.distanceCovered')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>
                     {summaryStats.totalDistKm}{' '}
@@ -1666,13 +1697,13 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>
-                    Pulso Cardíaco
+                    {t('player.heartRate')}
                   </div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f87171' }}>
                     {summaryStats.avgHr ? (
                       <>
                         {summaryStats.avgHr}{' '}
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ppm</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('player.bpmUnit')}</span>
                       </>
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
@@ -1680,7 +1711,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   </div>
                   {summaryStats.maxHr && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                      Máx: {summaryStats.maxHr} ppm
+                      {t('player.maxHr', { hr: summaryStats.maxHr })}
                     </div>
                   )}
                 </div>
@@ -1696,7 +1727,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               {garminUploadState === 'uploading' && (
                 <div className="alert-box alert-cyan" style={{ marginBottom: 16 }}>
                   <Loader2 size={18} className="spin" />
-                  <span>Subiendo sesión a Garmin Connect...</span>
+                  <span>{t('player.garminUploading')}</span>
                 </div>
               )}
 
@@ -1706,8 +1737,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     <CheckCircle2 size={18} />
                     <span className="garmin-success-badge">
                       {garminResult.duplicate
-                        ? 'Ya existía en Garmin Connect'
-                        : '¡Subida a Garmin Connect!'}
+                        ? t('player.garminDuplicate')
+                        : t('player.garminUploaded')}
                     </span>
                   </div>
                   {garminResult.activityUrl && (
@@ -1718,7 +1749,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                         window.electronAPI?.openExternalUrl(garminResult.activityUrl!)
                       }
                     >
-                      Ver en Garmin Connect <ExternalLink size={14} />
+                      {t('player.garminViewOn')} <ExternalLink size={14} />
                     </button>
                   )}
                 </div>
@@ -1730,9 +1761,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
                     <span>
                       {garminResult.needsRelogin
-                        ? garminResult.error ||
-                          'Tu sesión de Garmin Connect ha caducado. Vuelve a conectarte para subir la sesión.'
-                        : garminResult.error || 'Error al subir la sesión a Garmin Connect.'}
+                        ? garminResult.error || t('player.garminSessionExpired')
+                        : garminResult.error || t('player.garminUploadError')}
                     </span>
                   </div>
                   {garminResult.needsRelogin && (
@@ -1742,7 +1772,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                       style={{ padding: '7px 12px', fontSize: '0.82rem', alignSelf: 'flex-end' }}
                       onClick={() => handleUploadToGarmin(true)}
                     >
-                      Re-conectar y subir
+                      {t('player.garminReconnectAndUpload')}
                     </button>
                   )}
                 </div>
@@ -1759,11 +1789,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   >
                     {garminUploadState === 'uploading' ? (
                       <>
-                        <Loader2 size={18} className="spin" /> Subiendo a Garmin Connect...
+                        <Loader2 size={18} className="spin" /> {t('player.garminUploading')}
                       </>
                     ) : (
                       <>
-                        <Upload size={18} /> Subir a Garmin Connect
+                        <Upload size={18} /> {t('player.garminUploadBtn')}
                       </>
                     )}
                   </button>
@@ -1773,14 +1803,14 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   style={{ padding: '12px', fontSize: '0.95rem' }}
                   onClick={handleExportTcx}
                 >
-                  <Download size={18} /> Guardar .TCX (Strava / Garmin Connect)
+                  <Download size={18} /> {t('player.saveTcx')}
                 </button>
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '12px', fontSize: '0.95rem' }}
                   onClick={handleExportFit}
                 >
-                  <Download size={18} /> Guardar .FIT
+                  <Download size={18} /> {t('player.saveFit')}
                 </button>
               </div>
             </div>
@@ -1793,7 +1823,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   onExit();
                 }}
               >
-                Volver al Inicio
+                {t('freeride.backToHome')}
               </button>
             </div>
           </div>

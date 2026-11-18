@@ -19,6 +19,7 @@ import {
   DiscoveredDevice,
 } from '../types/workout';
 import { NumericInput } from './NumericInput';
+import { useI18n } from '../i18n';
 
 export interface ConnectionModalProps {
   isOpen: boolean;
@@ -73,6 +74,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
   onConnectAntHr,
   onDisconnectAntHr,
 }) => {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'ant' | 'ble' | 'simulator'>('ant');
   const [customHrId, setCustomHrId] = useState<number | undefined>(undefined);
 
@@ -96,12 +98,12 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
         <div className="modal-header">
           <div className="modal-title">
             <Radio className="text-cyan-400" size={22} style={{ color: 'var(--accent-cyan)' }} />
-            <span>Conexión de Hardware y Sensores</span>
+            <span>{t('conn.title')}</span>
           </div>
           <button
             className="btn btn-ghost btn-icon"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t('conn.close')}
           >
             <X size={20} />
           </button>
@@ -122,11 +124,11 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)' }} />
               <span style={{ fontSize: '0.9rem', color: '#ecfdf5', fontWeight: 600 }}>
-                Rodillo Conectado:{' '}
+                {t('conn.trainerConnected')}{' '}
                 <span style={{ color: 'var(--accent-emerald)' }}>
                   {deviceName || 'Tacx Neo 2'}
                 </span>{' '}
-                ({activeTransport === 'ant' ? 'ANT+ FE-C' : activeTransport === 'ble' ? 'Bluetooth FTMS' : 'Simulador'})
+                ({activeTransport === 'ant' ? 'ANT+ FE-C' : activeTransport === 'ble' ? 'Bluetooth FTMS' : t('conn.transportSim')})
               </span>
             </div>
             <button
@@ -134,7 +136,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
               style={{ padding: '6px 12px', fontSize: '0.8rem' }}
               onClick={onDisconnect}
             >
-              <Unlink size={14} /> Desconectar Rodillo
+              <Unlink size={14} /> {t('conn.disconnectTrainer')}
             </button>
           </div>
         )}
@@ -144,7 +146,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
           {/* SECTION 1: TRAINER SELECTION */}
           <div style={{ marginBottom: '8px' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
-              1. Rodillo de Transmisión Directa (Tacx Neo 2)
+              {t('conn.section1Title')}
             </div>
 
             {/* Navigation Tabs */}
@@ -153,19 +155,19 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                 className={`tab-btn ${activeTab === 'ant' ? 'active' : ''}`}
                 onClick={() => setActiveTab('ant')}
               >
-                <Radio size={16} /> ANT+ USB (Recomendado)
+                <Radio size={16} /> {t('conn.tabAnt')}
               </button>
               <button
                 className={`tab-btn ${activeTab === 'ble' ? 'active' : ''}`}
                 onClick={() => setActiveTab('ble')}
               >
-                <Bluetooth size={16} /> Bluetooth
+                <Bluetooth size={16} /> {t('conn.tabBle')}
               </button>
               <button
                 className={`tab-btn ${activeTab === 'simulator' ? 'active' : ''}`}
                 onClick={() => setActiveTab('simulator')}
               >
-                <Cpu size={16} /> Simulador Virtual
+                <Cpu size={16} /> {t('conn.tabSim')}
               </button>
             </div>
 
@@ -176,10 +178,10 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   <div className="alert-box alert-amber">
                     <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 2 }}>Aviso de conexión ANT+</div>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>{t('conn.antNoticeTitle')}</div>
                       <div>{errorMessage}</div>
                       <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#fbbf24' }}>
-                        💡 Tip: Si tienes <em>Garmin Express</em> abierto, ciérralo por completo desde la bandeja del sistema (suele acaparar el pincho USB ANT+).
+                        {t('conn.antTipBefore')}<em>Garmin Express</em>{t('conn.antTipAfter')}
                       </div>
                     </div>
                   </div>
@@ -197,10 +199,10 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div>
                       <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>
-                        Antena ANT+ USB
+                        {t('conn.antStickTitle')}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        {stickName || 'Pincho USB ANT+ (CyUSB / LibUsb / Garmin ANT2)'}
+                        {stickName || t('conn.antStickDefault')}
                       </div>
                     </div>
                     <button
@@ -210,12 +212,12 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                       disabled={isScanning || isConnecting}
                     >
                       <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
-                      {isScanning ? 'Escaneando...' : 'Escanear Canal'}
+                      {isScanning ? t('conn.scanning') : t('conn.scanChannel')}
                     </button>
                   </div>
 
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    ANT+ FE-C es el protocolo más robusto y sin latencia para el Tacx Neo 2. No requiere emparejamiento previo en Windows.
+                    {t('conn.antDesc')}
                   </p>
                 </div>
 
@@ -229,11 +231,11 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   >
                     <Zap size={17} />
                     {isConnecting && activeTransport === 'ant'
-                      ? 'Conectando con Tacx Neo 2...'
-                      : 'Conectar directo al rodillo cercano (Auto FE-C)'}
+                      ? t('conn.connectingTrainer')
+                      : t('conn.connectAutoFec')}
                   </button>
                   <div style={{ textAlign: 'center', marginTop: 5, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                    Enlaza de inmediato con cualquier rodillo ANT+ FE-C encendido cerca.
+                    {t('conn.connectAutoFecHint')}
                   </div>
                 </div>
 
@@ -241,16 +243,17 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                 {discoveredAntDevices.length > 0 && (
                   <div>
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
-                      Dispositivos FE-C detectados ({discoveredAntDevices.length})
+                      {t('conn.antDetected', { count: discoveredAntDevices.length })}
                     </div>
                     {discoveredAntDevices.map((dev) => (
                       <div key={dev.id || dev.antDeviceId} className="device-item">
                         <div>
                           <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.88rem' }}>
-                            {dev.name || `Rodillo FE-C (ID: ${dev.antDeviceId})`}
+                            {dev.name || t('conn.antDeviceFallback', { id: dev.antDeviceId ?? '' })}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            ID ANT: {dev.antDeviceId} {dev.rssi ? `· Señal: ${dev.rssi} dBm` : ''}
+                            {t('conn.antIdLabel')} {dev.antDeviceId}{' '}
+                            {dev.rssi ? t('conn.signalLabel', { rssi: dev.rssi }) : ''}
                           </div>
                         </div>
                         <button
@@ -259,7 +262,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                           onClick={() => onConnectAntDevice(dev.antDeviceId || 0)}
                           disabled={isConnecting}
                         >
-                          Conectar
+                          {t('conn.connect')}
                         </button>
                       </div>
                     ))}
@@ -281,10 +284,10 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   }}
                 >
                   <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem', marginBottom: 4 }}>
-                    Bluetooth Low Energy (FTMS / Tacx Smart)
+                    {t('conn.bleTitle')}
                   </div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    Conecta tu Tacx Neo 2 mediante el estándar FTMS (Fitness Machine Service) o Tacx BLE. Asegúrate de que no esté emparejado a tu móvil o a Rouvy simultáneamente.
+                    {t('conn.bleDesc')}
                   </p>
                 </div>
 
@@ -297,15 +300,15 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   >
                     <Bluetooth size={17} />
                     {isConnecting && activeTransport === 'ble'
-                      ? 'Buscando dispositivos Bluetooth...'
-                      : 'Buscar Tacx Neo 2 por Bluetooth'}
+                      ? t('conn.bleSearching')
+                      : t('conn.bleSearchBtn')}
                   </button>
                 </div>
 
                 {discoveredBleDevices.length > 0 && (
                   <div>
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
-                      Dispositivos Bluetooth encontrados
+                      {t('conn.bleFoundTitle')}
                     </div>
                     {discoveredBleDevices.map((d) => (
                       <div key={d.deviceId} className="device-item">
@@ -322,7 +325,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                           style={{ padding: '5px 12px', fontSize: '0.8rem' }}
                           onClick={() => onSelectBleDevice(d.deviceId)}
                         >
-                          Conectar
+                          {t('conn.connect')}
                         </button>
                       </div>
                     ))}
@@ -346,11 +349,11 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                     <Cpu size={22} style={{ color: 'var(--accent-cyan)' }} />
                     <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '1rem' }}>
-                      Rodillo Simulado Integrado
+                      {t('conn.simTitle')}
                     </div>
                   </div>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: 12 }}>
-                    Simula la respuesta del Tacx Neo 2 en modo ERG con variaciones realistas de vatios, cadencia ~90 RPM y velocidad.
+                    {t('conn.simDesc')}
                   </p>
                   <div
                     style={{
@@ -366,7 +369,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                     }}
                   >
                     <Info size={15} style={{ flexShrink: 0 }} />
-                    Ideal para probar planes, rampas, beeps y exportación sin subir a la bici.
+                    {t('conn.simHint')}
                   </div>
                 </div>
 
@@ -378,7 +381,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                     onClose();
                   }}
                 >
-                  <Zap size={17} /> Activar Rodillo Simulado
+                  <Zap size={17} /> {t('conn.simActivateBtn')}
                 </button>
               </div>
             )}
@@ -396,7 +399,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Heart size={20} style={{ color: '#ef4444' }} />
                 <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
-                  2. Banda de Frecuencia Cardíaca (Pulsómetro ANT+)
+                  {t('conn.section2Title')}
                 </span>
               </div>
               {isHrConnected && (
@@ -414,13 +417,13 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   }}
                 >
                   <Heart size={12} fill="currentColor" className="animate-pulse" />
-                  {hrBpm ? `${hrBpm} ppm` : 'Conectado'}
+                  {hrBpm ? `${hrBpm} ${t('conn.bpmUnit')}` : t('conn.connected')}
                 </span>
               )}
             </div>
 
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: 12 }}>
-              El pincho USB ANT+ conecta tu banda pectoral o brazalete óptico en el Canal 1 en paralelo con el Tacx Neo 2 sin interferencias ni pérdida de señal.
+              {t('conn.hrDesc')}
             </p>
 
             {hrErrorMessage && (
@@ -445,7 +448,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#fecaca' }}>
                     <Heart size={16} fill="#ef4444" color="#ef4444" />
-                    <span>{hrDeviceName || 'Pulsómetro ANT+'}</span>
+                    <span>{hrDeviceName || t('conn.hrDefaultName')}</span>
                     {hrDeviceId && hrDeviceId > 0 && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         (ID: {hrDeviceId})
@@ -453,7 +456,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                     )}
                   </div>
                   <div style={{ fontSize: '0.82rem', color: '#fca5a5', marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <strong>{hrBpm ? `${hrBpm} ppm` : 'Esperando latidos...'}</strong>
+                    <strong>{hrBpm ? `${hrBpm} ${t('conn.bpmUnit')}` : t('conn.hrWaiting')}</strong>
                     {hrBatteryStatus && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
                         <Battery size={13} /> {hrBatteryStatus}
@@ -467,7 +470,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                   onClick={() => onDisconnectAntHr?.()}
                 >
-                  <Unlink size={14} /> Desconectar Pulsómetro
+                  <Unlink size={14} /> {t('conn.disconnectHr')}
                 </button>
               </div>
             ) : (
@@ -481,8 +484,8 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   >
                     <Heart size={16} />
                     {isHrConnecting
-                      ? 'Buscando pulsómetro cercano...'
-                      : 'Emparejar Pulsómetro ANT+ Cercano (Auto)'}
+                      ? t('conn.hrSearching')
+                      : t('conn.hrPairAuto')}
                   </button>
                 </div>
 
@@ -490,7 +493,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                   <NumericInput
                     allowEmpty
                     min={1}
-                    placeholder="ID ANT+ específico (opcional)"
+                    placeholder={t('conn.hrCustomIdPlaceholder')}
                     className="input-number"
                     style={{ flex: 1, padding: '7px 10px', fontSize: '0.82rem' }}
                     value={customHrId}
@@ -504,7 +507,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
                     }}
                     disabled={!customHrId || customHrId <= 0 || isHrConnecting}
                   >
-                    Conectar por ID
+                    {t('conn.hrConnectById')}
                   </button>
                 </div>
               </div>
@@ -515,7 +518,7 @@ export const ConnectionModal: React.FC<ConnectionModalProps> = ({
         {/* Modal Footer */}
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>
-            Cerrar
+            {t('conn.close')}
           </button>
         </div>
       </div>

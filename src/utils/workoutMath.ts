@@ -14,11 +14,39 @@ export interface PowerZoneThreshold extends PowerZoneInfo {
   maxWatts: number | null;
 }
 
+const POWER_ZONE_LABELS: Record<number, { es: string; en: string }> = {
+  1: { es: 'Recuperación', en: 'Recovery' },
+  2: { es: 'Resistencia', en: 'Endurance' },
+  3: { es: 'Tempo', en: 'Tempo' },
+  4: { es: 'Umbral', en: 'Threshold' },
+  5: { es: 'VO2max', en: 'VO2max' },
+  6: { es: 'Anaeróbico', en: 'Anaerobic' },
+};
+
+/**
+ * Returns the localized name for a Coggan power zone (1..6 or 'Z1'..'Z6').
+ */
+export function getPowerZoneLabel(
+  zone: number | string,
+  lang: 'es' | 'en' = 'es'
+): string {
+  const num =
+    typeof zone === 'number'
+      ? zone
+      : parseInt(String(zone).replace(/^z/i, ''), 10) || 1;
+  const clamped = Math.max(1, Math.min(6, num));
+  const entry = POWER_ZONE_LABELS[clamped] || POWER_ZONE_LABELS[1];
+  return lang === 'en' ? entry.en : entry.es;
+}
+
 /**
  * Returns the 6 Coggan power zones with exact minimum/maximum watt thresholds
  * and ERG jump targets (minWatts + 10W, clamped within the zone) for the given FTP.
  */
-export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
+export function getPowerZoneThresholds(
+  ftp: number,
+  lang: 'es' | 'en' = 'es'
+): PowerZoneThreshold[] {
   const safeFtp = Math.max(1, ftp);
   const z1Min = Math.max(40, Math.round(safeFtp * 0.40));
   const z2Min = Math.ceil((safeFtp * 55) / 100);
@@ -37,7 +65,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 1,
       code: 'Z1',
-      name: 'Recuperación',
+      name: getPowerZoneLabel(1, lang),
       color: '#64748b',
       minWatts: z1Min,
       jumpWatts: Math.min(z1Max, z1Min + 10),
@@ -47,7 +75,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 2,
       code: 'Z2',
-      name: 'Resistencia',
+      name: getPowerZoneLabel(2, lang),
       color: '#3b82f6',
       minWatts: z2Min,
       jumpWatts: Math.min(z2Max, z2Min + 10),
@@ -57,7 +85,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 3,
       code: 'Z3',
-      name: 'Tempo / Sweet Spot',
+      name: getPowerZoneLabel(3, lang),
       color: '#10b981',
       minWatts: z3Min,
       jumpWatts: Math.min(z3Max, z3Min + 10),
@@ -67,7 +95,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 4,
       code: 'Z4',
-      name: 'Umbral (FTP)',
+      name: getPowerZoneLabel(4, lang),
       color: '#eab308',
       minWatts: z4Min,
       jumpWatts: Math.min(z4Max, z4Min + 10),
@@ -77,7 +105,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 5,
       code: 'Z5',
-      name: 'VO2max',
+      name: getPowerZoneLabel(5, lang),
       color: '#f97316',
       minWatts: z5Min,
       jumpWatts: Math.min(z5Max, z5Min + 10),
@@ -87,7 +115,7 @@ export function getPowerZoneThresholds(ftp: number): PowerZoneThreshold[] {
     {
       zone: 6,
       code: 'Z6',
-      name: 'Anaeróbico',
+      name: getPowerZoneLabel(6, lang),
       color: '#ef4444',
       minWatts: z6Min,
       jumpWatts: z6Min + 10,
@@ -139,26 +167,30 @@ export function resolveWatts(value: number, unit: PowerUnit, ftp: number): numbe
  *  - < 121%: Z5 VO2max (#f97316)
  *  - >= 121%: Z6 Anaeróbico (#ef4444)
  */
-export function getPowerZone(watts: number, ftp: number): PowerZoneInfo {
+export function getPowerZone(
+  watts: number,
+  ftp: number,
+  lang: 'es' | 'en' = 'es'
+): PowerZoneInfo {
   const safeFtp = Math.max(1, ftp);
   const pct = (watts / safeFtp) * 100;
 
   if (pct < 55) {
-    return { zone: 1, code: 'Z1', name: 'Recuperación', color: '#64748b' };
+    return { zone: 1, code: 'Z1', name: getPowerZoneLabel(1, lang), color: '#64748b' };
   }
   if (pct < 76) {
-    return { zone: 2, code: 'Z2', name: 'Resistencia', color: '#3b82f6' };
+    return { zone: 2, code: 'Z2', name: getPowerZoneLabel(2, lang), color: '#3b82f6' };
   }
   if (pct < 91) {
-    return { zone: 3, code: 'Z3', name: 'Tempo / Sweet Spot', color: '#10b981' };
+    return { zone: 3, code: 'Z3', name: getPowerZoneLabel(3, lang), color: '#10b981' };
   }
   if (pct < 106) {
-    return { zone: 4, code: 'Z4', name: 'Umbral (FTP)', color: '#eab308' };
+    return { zone: 4, code: 'Z4', name: getPowerZoneLabel(4, lang), color: '#eab308' };
   }
   if (pct < 121) {
-    return { zone: 5, code: 'Z5', name: 'VO2max', color: '#f97316' };
+    return { zone: 5, code: 'Z5', name: getPowerZoneLabel(5, lang), color: '#f97316' };
   }
-  return { zone: 6, code: 'Z6', name: 'Anaeróbico', color: '#ef4444' };
+  return { zone: 6, code: 'Z6', name: getPowerZoneLabel(6, lang), color: '#ef4444' };
 }
 
 export interface WorkoutProgressSnapshot {
@@ -424,7 +456,12 @@ export interface HrZoneInfo {
  * Returns Heart Rate Zone based on Karvonen formula (% Heart Rate Reserve).
  * If restingHr <= 0 or restingHr >= maxHr - 20, falls back to % maxHr.
  */
-export function getHrZone(bpm: number, maxHr: number, restingHr: number): HrZoneInfo {
+export function getHrZone(
+  bpm: number,
+  maxHr: number,
+  restingHr: number,
+  lang: 'es' | 'en' = 'es'
+): HrZoneInfo {
   const safeMax = Math.max(60, maxHr || 190);
   const safeResting = Math.max(0, restingHr || 60);
 
@@ -436,16 +473,36 @@ export function getHrZone(bpm: number, maxHr: number, restingHr: number): HrZone
   }
 
   if (hrrPct < 60) {
-    return { zone: 1, code: 'Z1', name: 'Recuperación', color: '#64748b' };
+    return {
+      zone: 1,
+      code: 'Z1',
+      name: lang === 'en' ? 'Recovery' : 'Recuperación',
+      color: '#64748b',
+    };
   }
   if (hrrPct < 70) {
-    return { zone: 2, code: 'Z2', name: 'Aeróbico', color: '#3b82f6' };
+    return {
+      zone: 2,
+      code: 'Z2',
+      name: lang === 'en' ? 'Aerobic' : 'Aeróbico',
+      color: '#3b82f6',
+    };
   }
   if (hrrPct < 80) {
     return { zone: 3, code: 'Z3', name: 'Tempo', color: '#10b981' };
   }
   if (hrrPct < 90) {
-    return { zone: 4, code: 'Z4', name: 'Umbral Anaeróbico', color: '#f97316' };
+    return {
+      zone: 4,
+      code: 'Z4',
+      name: lang === 'en' ? 'Threshold' : 'Umbral Anaeróbico',
+      color: '#f97316',
+    };
   }
-  return { zone: 5, code: 'Z5', name: 'Máximo / VO2max', color: '#ef4444' };
+  return {
+    zone: 5,
+    code: 'Z5',
+    name: lang === 'en' ? 'Max / VO2max' : 'Máximo / VO2max',
+    color: '#ef4444',
+  };
 }
