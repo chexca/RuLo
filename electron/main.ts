@@ -41,6 +41,10 @@ if (!gotTheLock) {
     }
   });
 
+  // Keep workout timers and Mini-HUD telemetry ticking even when covered by other windows
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
   app.whenReady().then(() => {
     // Prevent display sleep during workouts
     try {
@@ -74,6 +78,7 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -157,6 +162,7 @@ function createMiniHudWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
