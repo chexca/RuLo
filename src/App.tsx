@@ -380,10 +380,13 @@ export const App: React.FC = () => {
       if (state.errorMessage) setHrErrorMessage(state.errorMessage);
       else if (state.status === 'connected') setHrErrorMessage(undefined);
 
-      if (state.status === 'disconnected') {
+      if (state.status === 'disconnected' || !state.heartRateBpm || state.heartRateBpm <= 0) {
         liveAntHrRef.current = undefined;
         setHrBpm(undefined);
-      } else if (state.heartRateBpm && state.heartRateBpm > 0) {
+        setTelemetry((prev) =>
+          prev.heartRateBpm === undefined ? prev : { ...prev, heartRateBpm: undefined }
+        );
+      } else {
         liveAntHrRef.current = state.heartRateBpm;
         setHrBpm(state.heartRateBpm);
         // Inject into telemetry so heart rate is recorded and displayed everywhere
@@ -490,9 +493,9 @@ export const App: React.FC = () => {
   }, []);
 
   // Connect Simulator
-  const handleConnectSimulator = useCallback(() => {
+  const handleConnectSimulator = useCallback(async () => {
     // If another trainer was active, disconnect it first
-    handleDisconnectActiveTrainer();
+    await handleDisconnectActiveTrainer();
 
     setActiveTransport('simulator');
     setConnectionStatus('connected');

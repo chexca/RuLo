@@ -404,6 +404,47 @@ export function formatTime(totalSeconds: number): string {
 }
 
 /**
+ * Estimates virtual flat-road speed in km/h from mechanical power (Watts) and rider weight (kg).
+ * Solves: P * 0.97 = Crr * (m * 9.80665) * v + 0.5 * 1.225 * CdA * v^3
+ * with m = riderWeightKg + 8.5, Crr = 0.004, CdA = 0.32.
+ * Rounds result to 1 decimal place.
+ */
+export function estimateVirtualSpeedKmh(powerWatts: number, riderWeightKg = 72): number {
+  if (!Number.isFinite(powerWatts) || powerWatts <= 0) {
+    return 0;
+  }
+
+  const safeWeightKg =
+    Number.isFinite(riderWeightKg) && riderWeightKg > 0 ? riderWeightKg : 72;
+  const m = safeWeightKg + 8.5;
+  const crr = 0.004;
+  const cdA = 0.32;
+  const g = 9.80665;
+  const rho = 1.225;
+
+  const netPower = powerWatts * 0.97;
+  const a = crr * (m * g);
+  const b = 0.5 * rho * cdA;
+
+  // Newton-Raphson solver starting from pure aerodynamic upper bound
+  let v = Math.cbrt(netPower / b);
+  for (let i = 0; i < 10; i++) {
+    const f = b * v * v * v + a * v - netPower;
+    const df = 3 * b * v * v + a;
+    if (df <= 0) break;
+    const nextV = v - f / df;
+    if (Math.abs(nextV - v) < 1e-7) {
+      v = nextV;
+      break;
+    }
+    v = Math.max(0, nextV);
+  }
+
+  const speedKmh = Math.max(0, v * 3.6);
+  return Math.round(speedKmh * 10) / 10;
+}
+
+/**
  * Computes recorded energy expenditure in kcal and mechanical work in kJ from telemetry samples.
  * Uses direct mechanical work with human gross efficiency (23.9%) when pedaling,
  * and physiological Keytel heart rate formula as fallback when freewheeling (0W) with HR > 60 bpm.
