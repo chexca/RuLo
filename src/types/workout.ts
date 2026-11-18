@@ -115,6 +115,31 @@ export interface GarminUploadResult {
   error?: string;
 }
 
+export interface MiniHudData {
+  mode: 'workout' | 'freeride';
+  lang: 'es' | 'en';
+  isPlaying: boolean;
+  isFinished?: boolean;
+  powerWatts: number;
+  targetWatts: number | null;
+  ergEnabled: boolean;
+  zoneCode?: string;
+  zoneColor?: string;
+  zoneName?: string;
+  heartRateBpm?: number;
+  cadenceRpm?: number;
+  elapsedSec: number;
+  remainingSec?: number;
+  blockName?: string;
+  hideClock: boolean;
+  resistancePct?: number;
+}
+
+export type MiniHudCommand =
+  | { type: 'wattsDelta'; delta: number }
+  | { type: 'togglePause' }
+  | { type: 'close' };
+
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
   loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
@@ -159,6 +184,15 @@ export interface ElectronAPI {
     workoutName?: string;
   }) => Promise<GarminUploadResult>;
   openExternalUrl: (url: string) => Promise<void>;
+
+  // Floating Always-On-Top Mini-HUD
+  openMiniHud: () => Promise<boolean>;
+  closeMiniHud: () => Promise<void>;
+  updateMiniHud: (data: MiniHudData) => void;
+  onMiniHudData: (cb: (data: MiniHudData) => void) => () => void;
+  sendMiniHudCommand: (cmd: MiniHudCommand) => void;
+  onMiniHudCommand: (cb: (cmd: MiniHudCommand) => void) => () => void;
+  onMiniHudClosed: (cb: () => void) => () => void;
 }
 
 declare global {

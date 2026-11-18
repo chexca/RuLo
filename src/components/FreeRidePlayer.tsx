@@ -31,6 +31,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  PictureInPicture2,
 } from 'lucide-react';
 import {
   TrainerTelemetry,
@@ -126,6 +127,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const [elapsedSec, setElapsedSec] = useState(0);
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
+  const [miniHudActive, setMiniHudActive] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [garminUploadState, setGarminUploadState] = useState<
     'idle' | 'uploading' | 'success' | 'error'
@@ -570,6 +572,99 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const targetZoneInfo = getPowerZone(targetWatts, ftp, lang);
   const powerDelta = displayWatts - targetWatts;
 
+  const toggleMiniHud = async () => {
+    if (!window.electronAPI?.openMiniHud) return;
+    if (miniHudActive) {
+      setMiniHudActive(false);
+      await window.electronAPI.closeMiniHud?.();
+    } else {
+      const ok = await window.electronAPI.openMiniHud();
+      if (ok) {
+        setMiniHudActive(true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!miniHudActive || !window.electronAPI?.updateMiniHud) return;
+    const activeZone = ergEnabled ? targetZoneInfo : zoneInfo;
+    window.electronAPI.updateMiniHud({
+      mode: 'freeride',
+      lang,
+      isPlaying,
+      isFinished,
+      powerWatts: displayWatts,
+      targetWatts: ergEnabled ? targetWatts : null,
+      ergEnabled,
+      zoneCode: activeZone.code,
+      zoneColor: activeZone.color,
+      zoneName: activeZone.name,
+      heartRateBpm: telemetry.heartRateBpm,
+      cadenceRpm: telemetry.cadenceRpm,
+      elapsedSec,
+      hideClock: isNoClockActive,
+      resistancePct,
+    });
+  }, [
+    miniHudActive,
+    lang,
+    isPlaying,
+    isFinished,
+    displayWatts,
+    targetWatts,
+    ergEnabled,
+    targetZoneInfo,
+    zoneInfo,
+    telemetry.heartRateBpm,
+    telemetry.cadenceRpm,
+    elapsedSec,
+    isNoClockActive,
+    resistancePct,
+  ]);
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onMiniHudCommand) return;
+
+    const unsubCmd = api.onMiniHudCommand((cmd) => {
+      if (cmd.type === 'wattsDelta') {
+        if (ergEnabledRef.current) {
+          setTargetWatts((prev) => Math.max(30, Math.min(2000, Math.round(prev + cmd.delta))));
+        } else {
+          const step = cmd.delta > 0 ? 5 : -5;
+          setResistancePct((prev) => Math.max(0, Math.min(100, prev + step)));
+        }
+      } else if (cmd.type === 'togglePause') {
+        setIsPlaying((prev) => !prev);
+      } else if (cmd.type === 'close') {
+        setMiniHudActive(false);
+        void api.closeMiniHud?.();
+      }
+    });
+
+    const unsubClosed = api.onMiniHudClosed?.(() => {
+      setMiniHudActive(false);
+    });
+
+    return () => {
+      unsubCmd();
+      unsubClosed?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isFinished && miniHudActive) {
+      setMiniHudActive(false);
+      void window.electronAPI?.closeMiniHud?.();
+    }
+  }, [isFinished, miniHudActive]);
+
+  useEffect(() => {
+    return () => {
+      void window.electronAPI?.closeMiniHud?.();
+    };
+  }, []);
+
   const liveEnergy = useMemo(() => {
     return computeRecordedKcal(recordedSamples, {
       weightKg,
@@ -789,6 +884,27 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
               <Timer size={16} />
             )}
             <span>{t('player.noClock')}</span>
+          </button>
+
+          {/* Mini-HUD Floating Always-on-Top button */}
+          <button
+            type="button"
+            className={`btn ${miniHudActive ? 'btn-secondary btn-accent-active' : 'btn-secondary'}`}
+            onClick={toggleMiniHud}
+            title={
+              !window.electronAPI?.openMiniHud
+                ? t('minihud.desktopOnlyTitle')
+                : miniHudActive
+                ? t('minihud.btnCloseTitle')
+                : t('minihud.btnOpenTitle')
+            }
+          >
+            <PictureInPicture2
+              size={16}
+              style={miniHudActive ? { color: 'var(--accent-cyan)' } : undefined}
+            />
+            <span>{t('minihud.btn')}</span>
+            <span className="mini-hud-pro-badge">{t('minihud.proBadge')}</span>
           </button>
 
           {/* Power Smoothing Pill */}

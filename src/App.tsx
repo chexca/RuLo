@@ -47,6 +47,7 @@ import { ConnectionModal } from './components/ConnectionModal';
 import { WorkoutBuilder } from './components/WorkoutBuilder';
 import { WorkoutRidePlayer } from './components/WorkoutRidePlayer';
 import { FreeRidePlayer } from './components/FreeRidePlayer';
+import { MiniHudView } from './components/MiniHudView';
 import { NumericInput } from './components/NumericInput';
 import { useI18n, LanguageToggle } from './i18n';
 
@@ -158,6 +159,16 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 export const App: React.FC = () => {
+  const isMiniHud =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('view') === 'mini-hud';
+  if (isMiniHud) {
+    return <MiniHudView />;
+  }
+  return <MainApp />;
+};
+
+const MainApp: React.FC = () => {
   const { t } = useI18n();
   // Views: 'home' | 'library' | 'builder' | 'player' | 'free_ride'
   const [currentView, setCurrentView] = useState<'home' | 'library' | 'builder' | 'player' | 'free_ride'>('home');

@@ -32,6 +32,7 @@ import {
   Upload,
   ExternalLink,
   Loader2,
+  PictureInPicture2,
 } from 'lucide-react';
 import {
   Workout,
@@ -111,12 +112,13 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   autoUploadGarmin = false,
   onGarminLogin,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [biasWatts, setBiasWatts] = useState(0);
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
+  const [miniHudActive, setMiniHudActive] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [garminUploadState, setGarminUploadState] = useState<
     'idle' | 'uploading' | 'success' | 'error'
@@ -721,7 +723,95 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
   const currentWatts = telemetry.powerWatts || 0;
   const targetWatts = snapshot.targetWatts;
   const powerDelta = displayWatts - targetWatts;
-  const zoneInfo = getPowerZone(displayWatts, ftp);
+  const zoneInfo = getPowerZone(displayWatts, ftp, lang);
+  const targetZoneInfo = getPowerZone(targetWatts, ftp, lang);
+
+  const toggleMiniHud = async () => {
+    if (!window.electronAPI?.openMiniHud) return;
+    if (miniHudActive) {
+      setMiniHudActive(false);
+      await window.electronAPI.closeMiniHud?.();
+    } else {
+      const ok = await window.electronAPI.openMiniHud();
+      if (ok) {
+        setMiniHudActive(true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!miniHudActive || !window.electronAPI?.updateMiniHud) return;
+    window.electronAPI.updateMiniHud({
+      mode: 'workout',
+      lang,
+      isPlaying,
+      isFinished,
+      powerWatts: displayWatts,
+      targetWatts,
+      ergEnabled: true,
+      zoneCode: targetZoneInfo.code,
+      zoneColor: targetZoneInfo.color,
+      zoneName: targetZoneInfo.name,
+      heartRateBpm: telemetry.heartRateBpm,
+      cadenceRpm: telemetry.cadenceRpm,
+      elapsedSec: snapshot.sessionElapsedSec,
+      remainingSec: snapshot.blockRemainingSec,
+      blockName: snapshot.block?.label,
+      hideClock: isNoClockActive,
+    });
+  }, [
+    miniHudActive,
+    lang,
+    isPlaying,
+    isFinished,
+    displayWatts,
+    targetWatts,
+    targetZoneInfo,
+    telemetry.heartRateBpm,
+    telemetry.cadenceRpm,
+    snapshot.sessionElapsedSec,
+    snapshot.blockRemainingSec,
+    snapshot.block?.label,
+    isNoClockActive,
+  ]);
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onMiniHudCommand) return;
+
+    const unsubCmd = api.onMiniHudCommand((cmd) => {
+      if (cmd.type === 'wattsDelta') {
+        setBiasWatts((prev) => prev + cmd.delta);
+      } else if (cmd.type === 'togglePause') {
+        setIsPlaying((prev) => !prev);
+      } else if (cmd.type === 'close') {
+        setMiniHudActive(false);
+        void api.closeMiniHud?.();
+      }
+    });
+
+    const unsubClosed = api.onMiniHudClosed?.(() => {
+      setMiniHudActive(false);
+    });
+
+    return () => {
+      unsubCmd();
+      unsubClosed?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isFinished && miniHudActive) {
+      setMiniHudActive(false);
+      void window.electronAPI?.closeMiniHud?.();
+    }
+  }, [isFinished, miniHudActive]);
+
+  useEffect(() => {
+    return () => {
+      void window.electronAPI?.closeMiniHud?.();
+    };
+  }, []);
 
   // Block progress percentage
   const blockDuration = snapshot.block?.durationSec || 1;
@@ -857,6 +947,27 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
               <Timer size={16} />
             )}
             <span>{t('player.noClock')}</span>
+          </button>
+
+          {/* Mini-HUD Floating Always-on-Top button */}
+          <button
+            type="button"
+            className={`btn ${miniHudActive ? 'btn-secondary btn-accent-active' : 'btn-secondary'}`}
+            onClick={toggleMiniHud}
+            title={
+              !window.electronAPI?.openMiniHud
+                ? t('minihud.desktopOnlyTitle')
+                : miniHudActive
+                ? t('minihud.btnCloseTitle')
+                : t('minihud.btnOpenTitle')
+            }
+          >
+            <PictureInPicture2
+              size={16}
+              style={miniHudActive ? { color: 'var(--accent-cyan)' } : undefined}
+            />
+            <span>{t('minihud.btn')}</span>
+            <span className="mini-hud-pro-badge">{t('minihud.proBadge')}</span>
           </button>
 
           {/* Popover / Menú "Campos" (Vista) */}
