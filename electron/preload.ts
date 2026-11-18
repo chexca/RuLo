@@ -12,6 +12,12 @@ import type {
   GarminUploadOptions,
   GarminUploadResult,
 } from './garminConnect';
+import type {
+  StravaStatus,
+  StravaLoginResult,
+  StravaUploadOptions,
+  StravaUploadResult,
+} from './stravaConnect';
 
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
@@ -54,6 +60,13 @@ export interface ElectronAPI {
   garminLogout: () => Promise<void>;
   garminUploadActivity: (options: GarminUploadOptions) => Promise<GarminUploadResult>;
   openExternalUrl: (url: string) => Promise<void>;
+
+  // Direct Strava integration (Main process persistent session)
+  stravaGetStatus: () => Promise<StravaStatus>;
+  stravaLogin: () => Promise<StravaLoginResult>;
+  stravaLogout: () => Promise<void>;
+  stravaUploadActivity: (options: StravaUploadOptions) => Promise<StravaUploadResult>;
+  openExternalStravaUrl: (url: string) => Promise<void>;
 }
 
 const api: ElectronAPI = {
@@ -140,6 +153,15 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('garmin:upload-activity', options),
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('garmin:open-external-url', url),
+
+  // Direct Strava integration
+  stravaGetStatus: () => ipcRenderer.invoke('strava:get-status'),
+  stravaLogin: () => ipcRenderer.invoke('strava:login'),
+  stravaLogout: () => ipcRenderer.invoke('strava:logout'),
+  stravaUploadActivity: (options: StravaUploadOptions) =>
+    ipcRenderer.invoke('strava:upload-activity', options),
+  openExternalStravaUrl: (url: string) =>
+    ipcRenderer.invoke('strava:open-external-url', url),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);
