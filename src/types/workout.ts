@@ -49,6 +49,7 @@ export interface UserSettings {
   sessionFieldModes?: Record<string, SessionFieldMode>;
   powerSmoothingSec?: 0 | 3 | 5;
   autoUploadGarmin?: boolean;
+  autoUploadStrava?: boolean;
 }
 
 export type ConnectionTransport = 'ant' | 'ble' | 'simulator' | 'none';
@@ -140,6 +141,35 @@ export type MiniHudCommand =
   | { type: 'togglePause' }
   | { type: 'close' };
 
+export interface StravaStatus {
+  connected: boolean;
+  displayName?: string;
+  lastVerifiedAt?: string;
+}
+
+export interface StravaLoginResult {
+  ok: boolean;
+  connected: boolean;
+  displayName?: string;
+  error?: string;
+}
+
+export interface StravaUploadOptions {
+  fileName: string;
+  fitBase64?: string;
+  tcxContent: string;
+  workoutName?: string;
+}
+
+export interface StravaUploadResult {
+  ok: boolean;
+  activityId?: string | number;
+  activityUrl?: string;
+  duplicate?: boolean;
+  needsRelogin?: boolean;
+  error?: string;
+}
+
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
   loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
@@ -193,6 +223,13 @@ export interface ElectronAPI {
   sendMiniHudCommand: (cmd: MiniHudCommand) => void;
   onMiniHudCommand: (cb: (cmd: MiniHudCommand) => void) => () => void;
   onMiniHudClosed: (cb: () => void) => () => void;
+
+  // Direct Strava integration (Main process persistent session)
+  stravaGetStatus: () => Promise<StravaStatus>;
+  stravaLogin: () => Promise<StravaLoginResult>;
+  stravaLogout: () => Promise<void>;
+  stravaUploadActivity: (options: StravaUploadOptions) => Promise<StravaUploadResult>;
+  openExternalStravaUrl: (url: string) => Promise<void>;
 }
 
 declare global {

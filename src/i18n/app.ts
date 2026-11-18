@@ -16,6 +16,18 @@ export const es = {
   'app.garmin.link': 'Vincular Garmin Connect',
   'app.garmin.autoUpload': 'Subir automáticamente a Garmin Connect al completar sesión',
 
+  // Strava
+  'app.strava.desktopOnly': 'Strava solo está disponible en la app de escritorio.',
+  'app.strava.connectError': 'Error al conectar con Strava',
+  'app.strava.title': 'Strava',
+  'app.strava.connectedAs': 'Conectado como',
+  'app.strava.defaultUser': 'Atleta Strava',
+  'app.strava.notLinked': 'Desconectado',
+  'app.strava.unlink': 'Desconectar',
+  'app.strava.connecting': 'Conectando...',
+  'app.strava.link': 'Conectar Strava',
+  'app.strava.autoUpload': 'Subir automáticamente a Strava al finalizar',
+
   // Hardware & connections
   'app.conn.antScanError': 'No se pudo iniciar el escaneo ANT+.',
   'app.conn.antElectronRequired': 'La conexión ANT+ USB requiere ejecutarse dentro de la aplicación Electron.',
@@ -120,6 +132,18 @@ export const en: Record<keyof typeof es, string> = {
   'app.garmin.connecting': 'Connecting...',
   'app.garmin.link': 'Link Garmin Connect',
   'app.garmin.autoUpload': 'Auto-upload to Garmin Connect on session completion',
+
+  // Strava
+  'app.strava.desktopOnly': 'Strava is only available in the desktop app.',
+  'app.strava.connectError': 'Error connecting to Strava',
+  'app.strava.title': 'Strava',
+  'app.strava.connectedAs': 'Connected as',
+  'app.strava.defaultUser': 'Strava Athlete',
+  'app.strava.notLinked': 'Disconnected',
+  'app.strava.unlink': 'Disconnect',
+  'app.strava.connecting': 'Connecting...',
+  'app.strava.link': 'Connect Strava',
+  'app.strava.autoUpload': 'Auto-upload to Strava on finish',
 
   // Hardware & connections
   'app.conn.antScanError': 'Could not start ANT+ scan.',

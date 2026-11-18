@@ -37,6 +37,7 @@ import {
   TrainerStateEvent,
   HrSensorStateEvent,
   GarminStatus,
+  StravaStatus,
 } from './types/workout';
 import { computeWorkoutStats, formatTime } from './utils/workoutMath';
 import { parseWorkoutFileContent } from './utils/workoutImporter';
@@ -201,6 +202,11 @@ const MainApp: React.FC = () => {
   const [garminAuthBusy, setGarminAuthBusy] = useState(false);
   const [garminAuthError, setGarminAuthError] = useState<string | null>(null);
 
+  // Strava session state
+  const [stravaStatus, setStravaStatus] = useState<StravaStatus>({ connected: false });
+  const [stravaAuthBusy, setStravaAuthBusy] = useState(false);
+  const [stravaAuthError, setStravaAuthError] = useState<string | null>(null);
+
   // Telemetry stream from rodillo
   const [telemetry, setTelemetry] = useState<TrainerTelemetry>({
     timestamp: Date.now(),
@@ -323,6 +329,65 @@ const MainApp: React.FC = () => {
     }
   }, []);
 
+  // Initialize Strava connection status on mount
+  useEffect(() => {
+    const initStrava = async () => {
+      if (!window.electronAPI?.stravaGetStatus) return;
+      try {
+        const status = await window.electronAPI.stravaGetStatus();
+        if (status) {
+          setStravaStatus(status);
+        }
+      } catch (e) {
+        console.warn('Error checking Strava status', e);
+      }
+    };
+    initStrava();
+  }, []);
+
+  const handleStravaLogin = useCallback(async () => {
+    if (!window.electronAPI?.stravaLogin) {
+      return {
+        ok: false,
+        connected: false,
+        error: t('app.strava.desktopOnly'),
+      };
+    }
+    setStravaAuthBusy(true);
+    setStravaAuthError(null);
+    try {
+      const res = await window.electronAPI.stravaLogin();
+      setStravaStatus({
+        connected: res.connected,
+        displayName: res.displayName,
+        lastVerifiedAt: res.connected ? new Date().toISOString() : undefined,
+      });
+      if (!res.ok && res.error) {
+        setStravaAuthError(res.error);
+      }
+      return res;
+    } catch (err) {
+      const msg = (err as Error).message || t('app.strava.connectError');
+      setStravaAuthError(msg);
+      return { ok: false, connected: false, error: msg };
+    } finally {
+      setStravaAuthBusy(false);
+    }
+  }, [t]);
+
+  const handleStravaLogout = useCallback(async () => {
+    setStravaAuthBusy(true);
+    setStravaAuthError(null);
+    try {
+      if (window.electronAPI?.stravaLogout) {
+        await window.electronAPI.stravaLogout();
+      }
+      setStravaStatus({ connected: false });
+    } finally {
+      setStravaAuthBusy(false);
+    }
+  }, []);
+
   // Save workouts when changed
   const handleSaveWorkoutsList = useCallback(
     async (updated: Workout[]) => {
@@ -391,10 +456,13 @@ const MainApp: React.FC = () => {
       if (state.errorMessage) setHrErrorMessage(state.errorMessage);
       else if (state.status === 'connected') setHrErrorMessage(undefined);
 
-      if (state.status === 'disconnected') {
+      if (state.status === 'disconnected' || !state.heartRateBpm || state.heartRateBpm <= 0) {
         liveAntHrRef.current = undefined;
         setHrBpm(undefined);
-      } else if (state.heartRateBpm && state.heartRateBpm > 0) {
+        setTelemetry((prev) =>
+          prev.heartRateBpm === undefined ? prev : { ...prev, heartRateBpm: undefined }
+        );
+      } else {
         liveAntHrRef.current = state.heartRateBpm;
         setHrBpm(state.heartRateBpm);
         // Inject into telemetry so heart rate is recorded and displayed everywhere
@@ -501,9 +569,9 @@ const MainApp: React.FC = () => {
   }, []);
 
   // Connect Simulator
-  const handleConnectSimulator = useCallback(() => {
+  const handleConnectSimulator = useCallback(async () => {
     // If another trainer was active, disconnect it first
-    handleDisconnectActiveTrainer();
+    await handleDisconnectActiveTrainer();
 
     setActiveTransport('simulator');
     setConnectionStatus('connected');
@@ -863,6 +931,77 @@ const MainApp: React.FC = () => {
                 }
               />
               <span>{t('app.garmin.autoUpload')}</span>
+            </label>
+          </div>
+
+          {/* Strava Integration Section */}
+          <div className="garmin-profile-section" style={{ marginTop: '12px' }}>
+            <div className="garmin-profile-header">
+              <div>
+                <div className="garmin-profile-title">
+                  <Link2 size={16} style={{ color: '#fc4c02' }} />
+                  <span>{t('app.strava.title')}</span>
+                </div>
+                <div className="garmin-profile-status">
+                  {stravaStatus.connected ? (
+                    <span className="garmin-status-connected">
+                      <CheckCircle2 size={14} /> {t('app.strava.connectedAs')}{' '}
+                      <strong>{stravaStatus.displayName || t('app.strava.defaultUser')}</strong>
+                    </span>
+                  ) : (
+                    <span className="garmin-status-disconnected">{t('app.strava.notLinked')}</span>
+                  )}
+                </div>
+              </div>
+
+              {stravaStatus.connected ? (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ padding: '7px 12px', fontSize: '0.82rem' }}
+                  disabled={stravaAuthBusy}
+                  onClick={handleStravaLogout}
+                >
+                  {stravaAuthBusy ? <Loader2 size={14} className="spin" /> : t('app.strava.unlink')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{
+                    padding: '7px 14px',
+                    fontSize: '0.82rem',
+                    background: '#fc4c02',
+                    borderColor: '#fc4c02',
+                    color: '#fff',
+                  }}
+                  disabled={stravaAuthBusy}
+                  onClick={handleStravaLogin}
+                >
+                  {stravaAuthBusy ? (
+                    <>
+                      <Loader2 size={14} className="spin" /> {t('app.strava.connecting')}
+                    </>
+                  ) : (
+                    t('app.strava.link')
+                  )}
+                </button>
+              )}
+            </div>
+
+            {stravaAuthError && (
+              <div className="garmin-profile-error">{stravaAuthError}</div>
+            )}
+
+            <label className="garmin-auto-upload-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.autoUploadStrava)}
+                onChange={(e) =>
+                  handleUpdateSettings({ autoUploadStrava: e.target.checked })
+                }
+              />
+              <span>{t('app.strava.autoUpload')}</span>
             </label>
           </div>
         </div>

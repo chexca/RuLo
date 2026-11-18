@@ -42,6 +42,9 @@ import {
   SessionFieldKey,
   GarminStatus,
   GarminUploadResult,
+  StravaStatus,
+  StravaLoginResult,
+  StravaUploadResult,
 } from '../types/workout';
 import {
   getPowerZone,
@@ -50,6 +53,7 @@ import {
   getNextZoneMinWatts,
   getPrevZoneMinWatts,
   formatTime,
+  estimateVirtualSpeedKmh,
   computeRecordedKcal,
   getHrZone,
   HrZoneInfo,
@@ -81,6 +85,9 @@ export interface FreeRidePlayerProps {
   garminStatus?: GarminStatus;
   autoUploadGarmin?: boolean;
   onGarminLogin?: () => Promise<{ ok: boolean; connected: boolean; displayName?: string; error?: string }>;
+  stravaStatus?: StravaStatus;
+  autoUploadStrava?: boolean;
+  onStravaLogin?: () => Promise<StravaLoginResult>;
 }
 
 const FREE_RIDE_FIELD_KEYS: SessionFieldKey[] = [
@@ -115,6 +122,9 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   garminStatus,
   autoUploadGarmin = false,
   onGarminLogin,
+  stravaStatus,
+  autoUploadStrava,
+  onStravaLogin,
 }) => {
   const { t, lang } = useI18n();
   const defaultTargetWatts = Math.max(50, Math.round(ftp * 0.6));
@@ -125,6 +135,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [distanceMeters, setDistanceMeters] = useState(0);
+  const [, setStaleTick] = useState(0);
   const [recordedSamples, setRecordedSamples] = useState<RecordedSample[]>([]);
   const [isFinished, setIsFinished] = useState(false);
   const [miniHudActive, setMiniHudActive] = useState(false);
@@ -134,6 +146,67 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   >('idle');
   const [garminResult, setGarminResult] = useState<GarminUploadResult | undefined>(undefined);
   const autoUploadedGarminRef = useRef(false);
+
+  const [localStravaStatus, setLocalStravaStatus] = useState<StravaStatus>({ connected: false });
+  const [localAutoUploadStrava, setLocalAutoUploadStrava] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('rulo_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.autoUploadStrava === 'boolean') {
+          return parsed.autoUploadStrava;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  });
+  const [stravaUploadState, setStravaUploadState] = useState<
+    'idle' | 'uploading' | 'success' | 'error'
+  >('idle');
+  const [stravaResult, setStravaResult] = useState<StravaUploadResult | undefined>(undefined);
+  const autoUploadedStravaRef = useRef(false);
+
+  const effectiveStravaStatus = stravaStatus ?? localStravaStatus;
+  const effectiveAutoUploadStrava = autoUploadStrava ?? localAutoUploadStrava;
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncStravaState = async () => {
+      try {
+        const raw = localStorage.getItem('rulo_settings');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!cancelled && typeof parsed?.autoUploadStrava === 'boolean') {
+            setLocalAutoUploadStrava(parsed.autoUploadStrava);
+          }
+        } else if (window.electronAPI?.loadData) {
+          const data = await window.electronAPI.loadData();
+          if (!cancelled && typeof data?.settings?.autoUploadStrava === 'boolean') {
+            setLocalAutoUploadStrava(data.settings.autoUploadStrava);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      if (window.electronAPI?.stravaGetStatus) {
+        try {
+          const status = await window.electronAPI.stravaGetStatus();
+          if (!cancelled && status) {
+            setLocalStravaStatus(status);
+          }
+        } catch (e) {
+          console.warn('Error checking Strava status', e);
+        }
+      }
+    };
+    void syncStravaState();
+    return () => {
+      cancelled = true;
+    };
+  }, [isFinished]);
 
   // Field visibility and blur modes
   const [fieldModes, setFieldModes] = useState<Record<string, SessionFieldMode>>(
@@ -223,6 +296,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const elapsedSecRef = useRef(elapsedSec);
   elapsedSecRef.current = elapsedSec;
 
+  const distanceMetersRef = useRef(0);
+
+  const weightKgRef = useRef(weightKg);
+  weightKgRef.current = weightKg;
+
   const ergEnabledRef = useRef(ergEnabled);
   ergEnabledRef.current = ergEnabled;
 
@@ -231,6 +309,10 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
   const telemetryRef = useRef(telemetry);
   telemetryRef.current = telemetry;
+
+  const lastHrPacketMsRef = useRef<number>(
+    telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? telemetry.timestamp || Date.now() : 0
+  );
 
   const lastRecordedSecRef = useRef<number>(-1);
   const lastWallTimeRef = useRef<number | null>(null);
@@ -254,46 +336,97 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   useEffect(() => {
     const now = telemetry.timestamp || Date.now();
     const w = telemetry.powerWatts || 0;
+    const cad = telemetry.cadenceRpm || 0;
 
-    powerBufferRef.current.push({ t: now, w });
-    const cutoff = now - 10000;
-    powerBufferRef.current = powerBufferRef.current.filter((sample) => sample.t >= cutoff);
+    if (w <= 0 && cad <= 0) {
+      powerBufferRef.current = [];
+    } else {
+      const lastSample = powerBufferRef.current[powerBufferRef.current.length - 1];
+      if (lastSample && now - lastSample.t > 3000) {
+        powerBufferRef.current = [];
+      }
+      powerBufferRef.current.push({ t: now, w });
+      const cutoff = now - 10000;
+      powerBufferRef.current = powerBufferRef.current.filter((sample) => sample.t >= cutoff);
+    }
+
+    const hr = telemetry.heartRateBpm;
+    if (typeof hr === 'number' && hr > 0) {
+      lastHrPacketMsRef.current = now;
+    } else {
+      lastHrPacketMsRef.current = 0;
+    }
 
     if (isPlayingRef.current) {
       const acc = secondAccumulatorRef.current;
       acc.sumW += w;
       acc.n += 1;
 
-      const cad = telemetry.cadenceRpm;
       if (typeof cad === 'number' && cad > 0) {
         acc.sumCad += cad;
         acc.nCad += 1;
       }
 
-      const hr = telemetry.heartRateBpm;
       if (typeof hr === 'number' && hr > 0) {
         acc.sumHr += hr;
         acc.nHr += 1;
       }
     }
+
+    const timer3s = setTimeout(() => {
+      setStaleTick(Date.now());
+    }, 3050);
+    const timer6s = setTimeout(() => {
+      setStaleTick(Date.now());
+    }, 6100);
+
+    return () => {
+      clearTimeout(timer3s);
+      clearTimeout(timer6s);
+    };
   }, [telemetry.timestamp, telemetry.powerWatts, telemetry.cadenceRpm, telemetry.heartRateBpm]);
 
-  // Smoothed power for UI display
+  // Smoothed power for UI display with 3000ms stale fallback
   const smoothingSec = powerSmoothingSec ?? 3;
-  const displayWatts = useMemo(() => {
-    const rawWatts = telemetry.powerWatts || 0;
-    if (smoothingSec === 0) {
+  const smoothingSecRef = useRef(smoothingSec);
+  smoothingSecRef.current = smoothingSec;
+
+  const computeSmoothedWatts = (nowMs: number, curTelem: TrainerTelemetry, smoothWindowSec: number): number => {
+    if (!curTelem.timestamp || nowMs - curTelem.timestamp > 3000) {
+      return 0;
+    }
+    const rawWatts = curTelem.powerWatts || 0;
+    if (rawWatts <= 0 && (curTelem.cadenceRpm || 0) <= 0) {
+      return 0;
+    }
+    if (smoothWindowSec === 0) {
       return Math.round(rawWatts);
     }
-    const now = telemetry.timestamp || Date.now();
-    const windowStart = now - smoothingSec * 1000;
+    const refTime = curTelem.timestamp || nowMs;
+    const windowStart = refTime - smoothWindowSec * 1000;
     const samples = powerBufferRef.current.filter((s) => s.t >= windowStart);
     if (samples.length === 0) {
       return Math.round(rawWatts);
     }
     const sum = samples.reduce((acc, s) => acc + s.w, 0);
     return Math.round(sum / samples.length);
-  }, [telemetry.timestamp, telemetry.powerWatts, smoothingSec]);
+  };
+
+  const nowRenderMs = Date.now();
+  const isTelemetryStale = !telemetry.timestamp || nowRenderMs - telemetry.timestamp > 3000;
+  const isHrStale =
+    !telemetry.heartRateBpm ||
+    telemetry.heartRateBpm <= 0 ||
+    !lastHrPacketMsRef.current ||
+    nowRenderMs - lastHrPacketMsRef.current > 6000;
+
+  const displayWatts = computeSmoothedWatts(nowRenderMs, telemetry, smoothingSec);
+  const displayCadence = isTelemetryStale ? 0 : telemetry.cadenceRpm || 0;
+  const displayHeartRateBpm = isHrStale ? undefined : telemetry.heartRateBpm;
+  const liveSpeedKmh =
+    isPlaying && !isFinished && displayWatts > 0
+      ? estimateVirtualSpeedKmh(displayWatts, weightKg)
+      : 0;
 
   const handleCycleSmoothing = () => {
     const current = powerSmoothingSec ?? 3;
@@ -337,6 +470,16 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
       const deltaSec = (now - last) / 1000;
       lastWallTimeRef.current = now;
 
+      const curTelem = telemetryRef.current;
+      const tickWatts = computeSmoothedWatts(now, curTelem, smoothingSecRef.current);
+      const speedKmh =
+        tickWatts > 0 ? estimateVirtualSpeedKmh(tickWatts, weightKgRef.current) : 0;
+
+      if (deltaSec > 0) {
+        distanceMetersRef.current += (speedKmh / 3.6) * deltaSec;
+        setDistanceMeters(distanceMetersRef.current);
+      }
+
       const nextElapsed = elapsedSecRef.current + deltaSec;
       const currentSec = Math.floor(nextElapsed);
 
@@ -345,15 +488,25 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
 
       if (currentSec !== lastRecordedSecRef.current) {
         lastRecordedSecRef.current = currentSec;
-        const curTelem = telemetryRef.current;
+        const isStaleNow = !curTelem.timestamp || now - curTelem.timestamp > 3000;
+        const isHrStaleNow =
+          !curTelem.heartRateBpm ||
+          curTelem.heartRateBpm <= 0 ||
+          !lastHrPacketMsRef.current ||
+          now - lastHrPacketMsRef.current > 6000;
         const acc = secondAccumulatorRef.current;
 
-        const recPower = acc.n > 0 ? Math.round(acc.sumW / acc.n) : (curTelem.powerWatts || 0);
+        const recPower =
+          acc.n > 0
+            ? Math.round(acc.sumW / acc.n)
+            : isStaleNow
+            ? 0
+            : curTelem.powerWatts || 0;
 
         let recCadence: number;
         if (acc.nCad > 0) {
           recCadence = Math.round(acc.sumCad / acc.nCad);
-        } else if (acc.n > 0) {
+        } else if (acc.n > 0 || isStaleNow) {
           recCadence = 0;
         } else {
           recCadence = curTelem.cadenceRpm || 0;
@@ -362,9 +515,15 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
         let recHr: number | undefined;
         if (acc.nHr > 0) {
           recHr = Math.round(acc.sumHr / acc.nHr);
+        } else if (!isHrStaleNow && curTelem.heartRateBpm && curTelem.heartRateBpm > 0) {
+          recHr = curTelem.heartRateBpm;
         } else {
-          recHr = curTelem.heartRateBpm && curTelem.heartRateBpm > 0 ? curTelem.heartRateBpm : undefined;
+          recHr = undefined;
         }
+
+        const recSpeedKmh =
+          recPower > 0 ? estimateVirtualSpeedKmh(recPower, weightKgRef.current) : 0;
+        const recDistanceMeters = Number(distanceMetersRef.current.toFixed(2));
 
         secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
 
@@ -376,8 +535,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
             powerWatts: recPower,
             targetWatts: ergEnabledRef.current ? targetWattsRef.current : 0,
             cadenceRpm: recCadence,
-            speedKmh: curTelem.speedKmh || 0,
-            distanceMeters: curTelem.distanceMeters || 0,
+            speedKmh: recSpeedKmh,
+            distanceMeters: recDistanceMeters,
             heartRateBpm: recHr,
           },
         ]);
@@ -395,16 +554,26 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   const handleTogglePlay = () => {
     if (isFinished) {
       setElapsedSec(0);
+      elapsedSecRef.current = 0;
+      distanceMetersRef.current = 0;
+      setDistanceMeters(0);
       setIsFinished(false);
       setRecordedSamples([]);
       setExportMessage(null);
       setGarminUploadState('idle');
       setGarminResult(undefined);
       autoUploadedGarminRef.current = false;
+      setStravaUploadState('idle');
+      setStravaResult(undefined);
+      autoUploadedStravaRef.current = false;
       lastRecordedSecRef.current = -1;
       secondAccumulatorRef.current = { sumW: 0, sumCad: 0, nCad: 0, sumHr: 0, nHr: 0, n: 0 };
       setIsPlaying(true);
       return;
+    }
+    if (!isPlaying && elapsedSecRef.current === 0) {
+      distanceMetersRef.current = 0;
+      setDistanceMeters(0);
     }
     setIsPlaying(!isPlaying);
   };
@@ -566,6 +735,112 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
     }
   }, [isFinished, recordedSamples.length, autoUploadGarmin, garminStatus?.connected]);
 
+  const handleUploadToStrava = async (forceRelogin = false) => {
+    setStravaUploadState('uploading');
+    setStravaResult(undefined);
+
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const fileName = `${t('freeride.filePrefix')}_${date}.fit`;
+      const fitBase64 = generateFitBase64(sessionTitle, recordedSamples);
+      const tcxContent = generateTcx(sessionTitle, recordedSamples);
+
+      let currentStatus = effectiveStravaStatus;
+      if (!currentStatus?.connected && window.electronAPI?.stravaGetStatus) {
+        try {
+          const fresh = await window.electronAPI.stravaGetStatus();
+          if (fresh) {
+            setLocalStravaStatus(fresh);
+            currentStatus = fresh;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!currentStatus?.connected || forceRelogin) {
+        const loginFn =
+          onStravaLogin ??
+          (window.electronAPI?.stravaLogin
+            ? () => window.electronAPI!.stravaLogin()
+            : undefined);
+
+        if (!loginFn) {
+          setStravaUploadState('error');
+          setStravaResult({
+            ok: false,
+            error: t('player.stravaNoLoginManager'),
+          });
+          return;
+        }
+        const loginRes = await loginFn();
+        if (loginRes) {
+          setLocalStravaStatus({
+            connected: Boolean(loginRes.connected),
+            displayName: loginRes.displayName,
+            lastVerifiedAt: loginRes.connected ? new Date().toISOString() : undefined,
+          });
+        }
+        if (!loginRes.ok || !loginRes.connected) {
+          setStravaUploadState('error');
+          setStravaResult({
+            ok: false,
+            error: loginRes.error || t('player.stravaLoginFailed'),
+          });
+          return;
+        }
+      }
+
+      if (!window.electronAPI?.stravaUploadActivity) {
+        setStravaUploadState('error');
+        setStravaResult({
+          ok: false,
+          error: t('player.stravaDesktopOnly'),
+        });
+        return;
+      }
+
+      const res = await window.electronAPI.stravaUploadActivity({
+        fileName,
+        fitBase64,
+        tcxContent,
+        workoutName: sessionTitle,
+      });
+
+      if (res.ok) {
+        setStravaUploadState('success');
+        setStravaResult(res);
+      } else {
+        setStravaUploadState('error');
+        setStravaResult(res);
+      }
+    } catch (err) {
+      setStravaUploadState('error');
+      setStravaResult({
+        ok: false,
+        error: (err as Error).message || t('player.stravaUnexpectedError'),
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (
+      isFinished &&
+      recordedSamples.length > 0 &&
+      effectiveAutoUploadStrava &&
+      effectiveStravaStatus?.connected &&
+      !autoUploadedStravaRef.current
+    ) {
+      autoUploadedStravaRef.current = true;
+      void handleUploadToStrava();
+    }
+  }, [
+    isFinished,
+    recordedSamples.length,
+    effectiveAutoUploadStrava,
+    effectiveStravaStatus?.connected,
+  ]);
+
   // Derived zone & live telemetry values
   const zoneThresholds = useMemo(() => getPowerZoneThresholds(ftp, lang), [ftp, lang]);
   const zoneInfo = getPowerZone(displayWatts, ftp, lang);
@@ -682,11 +957,11 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
   }, [recordedSamples]);
 
   const hrZoneInfo: HrZoneInfo | null = useMemo(() => {
-    if (telemetry.heartRateBpm && telemetry.heartRateBpm > 0) {
-      return getHrZone(telemetry.heartRateBpm, maxHr, restingHr, lang);
+    if (displayHeartRateBpm && displayHeartRateBpm > 0) {
+      return getHrZone(displayHeartRateBpm, maxHr, restingHr, lang);
     }
     return null;
-  }, [telemetry.heartRateBpm, maxHr, restingHr, lang]);
+  }, [displayHeartRateBpm, maxHr, restingHr, lang]);
 
   // Post-ride summary calculations
   const summaryStats = useMemo(() => {
@@ -1320,7 +1595,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 <div>
                   <div className="sec-metric-unit">{t('player.cadence')}</div>
                   <div className="sec-metric-val">
-                    {telemetry.cadenceRpm || 0}
+                    {displayCadence}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>RPM</span>
                   </div>
                 </div>
@@ -1340,7 +1615,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   <div>
                     <div className="sec-metric-unit">{t('player.speed')}</div>
                     <div className="sec-metric-val">
-                      {(telemetry.speedKmh || 0).toFixed(1)}
+                      {liveSpeedKmh.toFixed(1)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km/h</span>
                     </div>
                   </div>
@@ -1357,7 +1632,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                   <div>
                     <div className="sec-metric-unit">{t('player.distance')}</div>
                     <div className="sec-metric-val">
-                      {((telemetry.distanceMeters || 0) / 1000).toFixed(2)}
+                      {(distanceMeters / 1000).toFixed(2)}
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginLeft: 4 }}>km</span>
                     </div>
                   </div>
@@ -1395,8 +1670,8 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     )}
                   </div>
                   <div className="sec-metric-val">
-                    {telemetry.heartRateBpm && telemetry.heartRateBpm > 0 ? (
-                      telemetry.heartRateBpm
+                    {displayHeartRateBpm && displayHeartRateBpm > 0 ? (
+                      displayHeartRateBpm
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>--</span>
                     )}
@@ -1406,7 +1681,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 <Heart
                   size={26}
                   style={{
-                    color: telemetry.heartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
+                    color: displayHeartRateBpm ? 'var(--accent-rose)' : 'var(--text-dim)',
                     flexShrink: 0,
                     marginLeft: 8,
                   }}
@@ -1894,6 +2169,67 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                 </div>
               )}
 
+              {stravaUploadState === 'uploading' && (
+                <div className="alert-box alert-cyan" style={{ marginBottom: 16 }}>
+                  <Loader2 size={18} className="spin" />
+                  <span>{t('player.stravaUploading')}</span>
+                </div>
+              )}
+
+              {stravaUploadState === 'success' && stravaResult && (
+                <div className="alert-box alert-emerald garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle2 size={18} />
+                    <span className="garmin-success-badge">
+                      {stravaResult.duplicate
+                        ? t('player.stravaDuplicate')
+                        : t('player.stravaUploaded')}
+                    </span>
+                  </div>
+                  {stravaResult.activityUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary garmin-external-btn"
+                      onClick={() =>
+                        window.electronAPI?.openExternalStravaUrl?.(stravaResult.activityUrl!)
+                      }
+                    >
+                      {t('player.stravaViewOn')} <ExternalLink size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {stravaUploadState === 'error' && stravaResult && (
+                <div className="alert-box alert-red garmin-upload-banner" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      {stravaResult.needsRelogin
+                        ? stravaResult.error || t('player.stravaSessionExpired')
+                        : stravaResult.error || t('player.stravaUploadError')}
+                    </span>
+                  </div>
+                  {stravaResult.needsRelogin && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{
+                        padding: '7px 12px',
+                        fontSize: '0.82rem',
+                        alignSelf: 'flex-end',
+                        background: '#fc4c02',
+                        borderColor: '#fc4c02',
+                        color: '#fff',
+                      }}
+                      onClick={() => handleUploadToStrava(true)}
+                    >
+                      {t('player.stravaReconnectAndUpload')}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Export & Upload Actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {garminUploadState !== 'success' && (
@@ -1910,6 +2246,30 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
                     ) : (
                       <>
                         <Upload size={18} /> {t('player.garminUploadBtn')}
+                      </>
+                    )}
+                  </button>
+                )}
+                {stravaUploadState !== 'success' && (
+                  <button
+                    className="btn btn-primary"
+                    style={{
+                      padding: '12px',
+                      fontSize: '0.95rem',
+                      background: '#fc4c02',
+                      borderColor: '#fc4c02',
+                      color: '#fff',
+                    }}
+                    disabled={stravaUploadState === 'uploading'}
+                    onClick={() => handleUploadToStrava(false)}
+                  >
+                    {stravaUploadState === 'uploading' ? (
+                      <>
+                        <Loader2 size={18} className="spin" /> {t('player.stravaUploading')}
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={18} /> {t('player.stravaUploadBtn')}
                       </>
                     )}
                   </button>

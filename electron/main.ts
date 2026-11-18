@@ -18,6 +18,14 @@ import {
   openExternalGarminUrl,
   type GarminUploadOptions,
 } from './garminConnect';
+import {
+  stravaGetStatus,
+  stravaLogin,
+  stravaLogout,
+  stravaUploadActivity,
+  openExternalStravaUrl,
+  type StravaUploadOptions,
+} from './stravaConnect';
 
 // Append Chromium feature switches before app is ready for Web Bluetooth support
 app.commandLine.appendSwitch('enable-experimental-web-platform-features');
@@ -329,6 +337,32 @@ ipcMain.on('mini-hud:command', (_event, cmd) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('mini-hud:command', cmd);
   }
+});
+
+// -----------------------------------------------------------------------------
+// IPC Routes: Direct Strava Integration
+// -----------------------------------------------------------------------------
+ipcMain.handle('strava:get-status', async () => {
+  return stravaGetStatus();
+});
+
+ipcMain.handle('strava:login', async () => {
+  return stravaLogin(mainWindow);
+});
+
+ipcMain.handle('strava:logout', async () => {
+  return stravaLogout();
+});
+
+ipcMain.handle(
+  'strava:upload-activity',
+  async (_event, options: StravaUploadOptions) => {
+    return stravaUploadActivity(options);
+  }
+);
+
+ipcMain.handle('strava:open-external-url', async (_event, url: string) => {
+  return openExternalStravaUrl(url);
 });
 
 // Bluetooth device selection from renderer UI
