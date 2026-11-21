@@ -19,6 +19,31 @@ import type {
   StravaUploadResult,
 } from './stravaConnect';
 
+export interface MiniHudData {
+  mode: 'workout' | 'freeride';
+  lang: 'es' | 'en';
+  isPlaying: boolean;
+  isFinished?: boolean;
+  powerWatts: number;
+  targetWatts: number | null;
+  ergEnabled: boolean;
+  zoneCode?: string;
+  zoneColor?: string;
+  zoneName?: string;
+  heartRateBpm?: number;
+  cadenceRpm?: number;
+  elapsedSec: number;
+  remainingSec?: number;
+  blockName?: string;
+  hideClock: boolean;
+  resistancePct?: number;
+}
+
+export type MiniHudCommand =
+  | { type: 'wattsDelta'; delta: number }
+  | { type: 'togglePause' }
+  | { type: 'close' };
+
 export interface ElectronAPI {
   // Persistence: Workouts & Settings
   loadData: () => Promise<{ workouts: Workout[]; settings: UserSettings }>;
@@ -60,6 +85,15 @@ export interface ElectronAPI {
   garminLogout: () => Promise<void>;
   garminUploadActivity: (options: GarminUploadOptions) => Promise<GarminUploadResult>;
   openExternalUrl: (url: string) => Promise<void>;
+
+  // Floating Always-On-Top Mini-HUD
+  openMiniHud: () => Promise<boolean>;
+  closeMiniHud: () => Promise<void>;
+  updateMiniHud: (data: MiniHudData) => void;
+  onMiniHudData: (cb: (data: MiniHudData) => void) => () => void;
+  sendMiniHudCommand: (cmd: MiniHudCommand) => void;
+  onMiniHudCommand: (cb: (cmd: MiniHudCommand) => void) => () => void;
+  onMiniHudClosed: (cb: () => void) => () => void;
 
   // Direct Strava integration (Main process persistent session)
   stravaGetStatus: () => Promise<StravaStatus>;
@@ -153,6 +187,37 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('garmin:upload-activity', options),
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke('garmin:open-external-url', url),
+
+  // Floating Always-On-Top Mini-HUD
+  openMiniHud: () => ipcRenderer.invoke('mini-hud:open'),
+  closeMiniHud: () => ipcRenderer.invoke('mini-hud:close'),
+  updateMiniHud: (data: MiniHudData) => {
+    ipcRenderer.send('mini-hud:update-data', data);
+  },
+  onMiniHudData: (cb: (data: MiniHudData) => void) => {
+    const listener = (_event: IpcRendererEvent, data: MiniHudData) => cb(data);
+    ipcRenderer.on('mini-hud:data', listener);
+    return () => {
+      ipcRenderer.removeListener('mini-hud:data', listener);
+    };
+  },
+  sendMiniHudCommand: (cmd: MiniHudCommand) => {
+    ipcRenderer.send('mini-hud:command', cmd);
+  },
+  onMiniHudCommand: (cb: (cmd: MiniHudCommand) => void) => {
+    const listener = (_event: IpcRendererEvent, cmd: MiniHudCommand) => cb(cmd);
+    ipcRenderer.on('mini-hud:command', listener);
+    return () => {
+      ipcRenderer.removeListener('mini-hud:command', listener);
+    };
+  },
+  onMiniHudClosed: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('mini-hud:closed', listener);
+    return () => {
+      ipcRenderer.removeListener('mini-hud:closed', listener);
+    };
+  },
 
   // Direct Strava integration
   stravaGetStatus: () => ipcRenderer.invoke('strava:get-status'),

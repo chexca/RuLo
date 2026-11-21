@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, powerSaveBlocker } from 'electron';
+import { app, BrowserWindow, ipcMain, powerSaveBlocker, screen } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -32,6 +32,8 @@ app.commandLine.appendSwitch('enable-experimental-web-platform-features');
 app.commandLine.appendSwitch('enable-web-bluetooth');
 
 let mainWindow: BrowserWindow | null = null;
+let miniHudWindow: BrowserWindow | null = null;
+let latestMiniHudData: unknown = null;
 let btCallback: ((deviceId: string) => void) | null = null;
 let powerSaveBlockerId: number | null = null;
 
@@ -46,6 +48,10 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
   });
+
+  // Keep workout timers and Mini-HUD telemetry ticking even when covered by other windows
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
   app.whenReady().then(() => {
     // Prevent display sleep during workouts
@@ -80,6 +86,7 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -118,9 +125,100 @@ function createMainWindow(): BrowserWindow {
   win.on('closed', () => {
     mainWindow = null;
     btCallback = null;
+    closeMiniHudWindow();
   });
 
   return win;
+}
+
+function closeMiniHudWindow(): void {
+  if (miniHudWindow && !miniHudWindow.isDestroyed()) {
+    miniHudWindow.close();
+  }
+  miniHudWindow = null;
+}
+
+function createMiniHudWindow(): BrowserWindow {
+  if (miniHudWindow && !miniHudWindow.isDestroyed()) {
+    miniHudWindow.showInactive();
+    return miniHudWindow;
+  }
+
+  const hudWidth = 492;
+  const hudHeight = 112;
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const x = Math.round(workArea.x + (workArea.width - hudWidth) / 2);
+  const y = Math.round(workArea.y + workArea.height - hudHeight - 24);
+
+  const hud = new BrowserWindow({
+    width: hudWidth,
+    height: hudHeight,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    hasShadow: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  miniHudWindow = hud;
+
+  try {
+    hud.setAlwaysOnTop(true, 'screen-saver');
+    hud.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch {
+    hud.setAlwaysOnTop(true);
+  }
+
+  const distIndexPath = path.join(__dirname, '../dist/index.html');
+  const devBaseUrl =
+    process.env.ELECTRON_RENDERER_URL ||
+    process.env.VITE_DEV_SERVER_URL ||
+    'http://localhost:5173';
+
+  if (process.env.ELECTRON_RENDERER_URL || (!app.isPackaged && !fs.existsSync(distIndexPath)) || !fs.existsSync(distIndexPath)) {
+    const hudUrl = new URL(devBaseUrl);
+    hudUrl.searchParams.set('view', 'mini-hud');
+    void hud.loadURL(hudUrl.toString());
+  } else {
+    void hud.loadFile(distIndexPath, { query: { view: 'mini-hud' } });
+  }
+
+  hud.once('ready-to-show', () => {
+    if (!hud.isDestroyed()) {
+      hud.showInactive();
+    }
+  });
+
+  hud.webContents.once('did-finish-load', () => {
+    if (!hud.isDestroyed() && latestMiniHudData !== null) {
+      hud.webContents.send('mini-hud:data', latestMiniHudData);
+    }
+  });
+
+  hud.on('closed', () => {
+    if (miniHudWindow === hud) {
+      miniHudWindow = null;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('mini-hud:closed');
+    }
+  });
+
+  return hud;
 }
 
 // -----------------------------------------------------------------------------
@@ -214,6 +312,31 @@ ipcMain.handle(
 
 ipcMain.handle('garmin:open-external-url', async (_event, url: string) => {
   return openExternalGarminUrl(url);
+});
+
+// -----------------------------------------------------------------------------
+// IPC Routes: Floating Always-On-Top Mini-HUD
+// -----------------------------------------------------------------------------
+ipcMain.handle('mini-hud:open', async () => {
+  createMiniHudWindow();
+  return true;
+});
+
+ipcMain.handle('mini-hud:close', async () => {
+  closeMiniHudWindow();
+});
+
+ipcMain.on('mini-hud:update-data', (_event, data) => {
+  latestMiniHudData = data;
+  if (miniHudWindow && !miniHudWindow.isDestroyed()) {
+    miniHudWindow.webContents.send('mini-hud:data', data);
+  }
+});
+
+ipcMain.on('mini-hud:command', (_event, cmd) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('mini-hud:command', cmd);
+  }
 });
 
 // -----------------------------------------------------------------------------

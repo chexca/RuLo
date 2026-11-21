@@ -164,6 +164,26 @@ export const es = {
   'freeride.controlsFreeNoErg': 'Sin ERG',
   'freeride.summaryTitle': '¡Sesión de Rodaje Completada!',
   'freeride.backToHome': 'Volver al Inicio',
+
+  // Mini-HUD
+  'minihud.btn': 'Mini-HUD',
+  'minihud.proBadge': 'PRO',
+  'minihud.btnOpenTitle': 'Abrir Mini-HUD flotante (siempre visible sobre Netflix, YouTube o carreras)',
+  'minihud.btnCloseTitle': 'Cerrar Mini-HUD flotante',
+  'minihud.desktopOnlyTitle': 'El Mini-HUD flotante solo está disponible en la app de escritorio',
+  'minihud.waiting': 'Conectando con la sesión...',
+  'minihud.target': 'OBJ',
+  'minihud.freeMode': 'LIBRE',
+  'minihud.remaining': 'Rest.',
+  'minihud.elapsed': 'Tiempo',
+  'minihud.pause': 'Pausar',
+  'minihud.resume': 'Reanudar',
+  'minihud.close': 'Cerrar Mini-HUD',
+  'minihud.minus10': '-10W',
+  'minihud.plus10': '+10W',
+  'minihud.minus10Title': 'Reducir objetivo 10 W',
+  'minihud.plus10Title': 'Subir objetivo 10 W',
+  'minihud.dragTitle': 'Arrastrar Mini-HUD',
 } as const;
 
 export const en: Record<keyof typeof es, string> = {
@@ -332,4 +352,24 @@ export const en: Record<keyof typeof es, string> = {
   'freeride.controlsFreeNoErg': 'No ERG',
   'freeride.summaryTitle': 'Free Ride Session Completed!',
   'freeride.backToHome': 'Back to Home',
+
+  // Mini-HUD
+  'minihud.btn': 'Mini-HUD',
+  'minihud.proBadge': 'PRO',
+  'minihud.btnOpenTitle': 'Open floating Mini-HUD (always on top over Netflix, YouTube, or races)',
+  'minihud.btnCloseTitle': 'Close floating Mini-HUD',
+  'minihud.desktopOnlyTitle': 'Floating Mini-HUD is only available in the desktop app',
+  'minihud.waiting': 'Connecting to session...',
+  'minihud.target': 'TGT',
+  'minihud.freeMode': 'FREE',
+  'minihud.remaining': 'Rem.',
+  'minihud.elapsed': 'Time',
+  'minihud.pause': 'Pause',
+  'minihud.resume': 'Resume',
+  'minihud.close': 'Close Mini-HUD',
+  'minihud.minus10': '-10W',
+  'minihud.plus10': '+10W',
+  'minihud.minus10Title': 'Decrease target by 10 W',
+  'minihud.plus10Title': 'Increase target by 10 W',
+  'minihud.dragTitle': 'Drag Mini-HUD',
 };
