@@ -75,11 +75,13 @@ export function generateTcx(workoutName: string, samples: RecordedSample[]): str
           </HeartRateBpm>`
           : '';
 
+      // TCX v2 XSD order inside Trackpoint: Time, Position, AltitudeMeters, DistanceMeters,
+      // HeartRateBpm, Cadence, SensorState, Extensions
       return `        <Trackpoint>
           <Time>${timeIso}</Time>
           <DistanceMeters>${dist}</DistanceMeters>
-          <Cadence>${cad}</Cadence>
-${hrBlock ? hrBlock + '\n' : ''}          <Extensions>
+${hrBlock ? hrBlock + '\n' : ''}          <Cadence>${cad}</Cadence>
+          <Extensions>
             <ns3:TPX>
               <ns3:Speed>${speedMps}</ns3:Speed>
               <ns3:Watts>${watts}</ns3:Watts>
@@ -282,8 +284,34 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   const workKj = (avgWatts * totalTimeSeconds) / 1000;
   const calories = Math.round(workKj / (4.184 * 0.239));
 
-  // Normalized power approximation (or avgWatts if short)
-  const normPower = avgWatts;
+  // Normalized Power: 30 s rolling average (samples are ~1 Hz), 4th power mean, 4th root.
+  // Falls back to average power for sessions shorter than 30 samples.
+  let normPower = avgWatts;
+  if (safeSamples.length >= 30) {
+    const windowSize = 30;
+    let rollingSum = 0;
+    let fourthPowerSum = 0;
+    let windows = 0;
+    for (let i = 0; i < safeSamples.length; i++) {
+      rollingSum += Math.max(0, safeSamples[i].powerWatts ?? 0);
+      if (i >= windowSize) {
+        rollingSum -= Math.max(0, safeSamples[i - windowSize].powerWatts ?? 0);
+      }
+      if (i >= windowSize - 1) {
+        const rollingAvg = rollingSum / windowSize;
+        fourthPowerSum += Math.pow(rollingAvg, 4);
+        windows++;
+      }
+    }
+    if (windows > 0) {
+      normPower = Math.round(Math.pow(fourthPowerSum / windows, 0.25));
+    }
+  }
+
+  // FIT invalid value for uint8 is 0xFF: use it when there is no heart rate data
+  const FIT_UINT8_INVALID = 0xff;
+  const fitAvgHr = hrCount > 0 ? Math.min(254, avgHr) : FIT_UINT8_INVALID;
+  const fitMaxHr = hrCount > 0 ? Math.min(254, Math.round(maxHr)) : FIT_UINT8_INVALID;
 
   // 1. FIT Header (14 bytes)
   // [0] Header size: 14
@@ -332,10 +360,12 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   writer.writeBytes([0x06, 0x02, 0x84]);
   // Field 7: power (uint16, 2 bytes, 0x84, Watts)
   writer.writeBytes([0x07, 0x02, 0x84]);
-  // Field 3: cadence (uint8, 1 byte, 0x02, RPM)
-  writer.writeBytes([0x03, 0x01, 0x02]);
-  // Field 4: heart_rate (uint8, 1 byte, 0x02, BPM)
+  // FIT Profile (record): field 3 = heart_rate, field 4 = cadence.
+  // Data below is written as cadence first, then heart rate, so definitions follow that order.
+  // Field 4: cadence (uint8, 1 byte, 0x02, RPM)
   writer.writeBytes([0x04, 0x01, 0x02]);
+  // Field 3: heart_rate (uint8, 1 byte, 0x02, BPM)
+  writer.writeBytes([0x03, 0x01, 0x02]);
 
   // Data records
   for (const s of safeSamples) {
@@ -344,7 +374,10 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
     const speedMps1000 = Math.max(0, Math.round(((s.speedKmh ?? 0) / 3.6) * 1000));
     const pwr = Math.max(0, Math.min(65535, Math.round(s.powerWatts ?? 0)));
     const cad = Math.max(0, Math.min(255, Math.round(s.cadenceRpm ?? 0)));
-    const hr = Math.max(0, Math.min(255, Math.round(s.heartRateBpm ?? 0)));
+    const hr =
+      s.heartRateBpm && s.heartRateBpm > 0
+        ? Math.max(1, Math.min(254, Math.round(s.heartRateBpm)))
+        : FIT_UINT8_INVALID;
 
     writer.writeUint8(0x01); // Local Mesg 1 Data
     writer.writeUint32LE(sampleEpoch);
@@ -370,10 +403,11 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   writer.writeBytes([0x0e, 0x02, 0x84]); // max_speed (scale 1000)
   writer.writeBytes([0x13, 0x02, 0x84]); // avg_power
   writer.writeBytes([0x14, 0x02, 0x84]); // max_power
-  writer.writeBytes([0x0f, 0x01, 0x02]); // avg_cadence
-  writer.writeBytes([0x10, 0x01, 0x02]); // max_cadence
-  writer.writeBytes([0x11, 0x01, 0x02]); // avg_heart_rate
-  writer.writeBytes([0x12, 0x01, 0x02]); // max_heart_rate
+  // FIT Profile (lap): 15 avg_heart_rate, 16 max_heart_rate, 17 avg_cadence, 18 max_cadence
+  writer.writeBytes([0x11, 0x01, 0x02]); // avg_cadence (17)
+  writer.writeBytes([0x12, 0x01, 0x02]); // max_cadence (18)
+  writer.writeBytes([0x0f, 0x01, 0x02]); // avg_heart_rate (15)
+  writer.writeBytes([0x10, 0x01, 0x02]); // max_heart_rate (16)
 
   // Data: Local Mesg 2
   writer.writeUint8(0x02);
@@ -391,8 +425,8 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   writer.writeUint16LE(maxWatts);
   writer.writeUint8(avgCad);
   writer.writeUint8(maxCad);
-  writer.writeUint8(avgHr);
-  writer.writeUint8(maxHr);
+  writer.writeUint8(fitAvgHr);
+  writer.writeUint8(fitMaxHr);
 
   // 5. Session Message (Global Mesg 18, Local Mesg 3)
   // Definition: Header 0x43, Reserved 0x00, Arch 0x00, MesgNum 18 (0x0012), 20 fields
@@ -411,12 +445,14 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   writer.writeBytes([0x0f, 0x02, 0x84]); // max_speed
   writer.writeBytes([0x14, 0x02, 0x84]); // avg_power
   writer.writeBytes([0x15, 0x02, 0x84]); // max_power
-  writer.writeBytes([0x10, 0x01, 0x02]); // avg_cadence
-  writer.writeBytes([0x11, 0x01, 0x02]); // max_cadence
-  writer.writeBytes([0x12, 0x01, 0x02]); // avg_heart_rate
-  writer.writeBytes([0x13, 0x01, 0x02]); // max_heart_rate
-  writer.writeBytes([0x16, 0x02, 0x84]); // normalized_power
-  writer.writeBytes([0x19, 0x02, 0x84]); // num_laps
+  // FIT Profile (session): 16 avg_heart_rate, 17 max_heart_rate, 18 avg_cadence, 19 max_cadence,
+  // 26 num_laps, 34 normalized_power
+  writer.writeBytes([0x12, 0x01, 0x02]); // avg_cadence (18)
+  writer.writeBytes([0x13, 0x01, 0x02]); // max_cadence (19)
+  writer.writeBytes([0x10, 0x01, 0x02]); // avg_heart_rate (16)
+  writer.writeBytes([0x11, 0x01, 0x02]); // max_heart_rate (17)
+  writer.writeBytes([0x22, 0x02, 0x84]); // normalized_power (34)
+  writer.writeBytes([0x1a, 0x02, 0x84]); // num_laps (26)
 
   // Data: Local Mesg 3
   writer.writeUint8(0x03);
@@ -436,8 +472,8 @@ export function generateFitBase64(workoutName: string, samples: RecordedSample[]
   writer.writeUint16LE(maxWatts);
   writer.writeUint8(avgCad);
   writer.writeUint8(maxCad);
-  writer.writeUint8(avgHr);
-  writer.writeUint8(maxHr);
+  writer.writeUint8(fitAvgHr);
+  writer.writeUint8(fitMaxHr);
   writer.writeUint16LE(normPower);
   writer.writeUint16LE(1); // num_laps = 1
 

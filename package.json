@@ -1,6 +1,6 @@
 {
   "name": "rulo-erg",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Entrenador minimalista en modo ERG para Tacx Neo 2 (ANT+ FE-C y Bluetooth)",
   "main": "dist-electron/main.js",
   "scripts": {
