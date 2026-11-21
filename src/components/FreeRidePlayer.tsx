@@ -1094,7 +1094,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
     <div className="player-container">
       {/* Top Status Bar */}
       <div className="player-top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="player-top-bar-left">
           <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8fafc' }}>
             {t('freeride.title')}
           </div>
@@ -1114,7 +1114,7 @@ export const FreeRidePlayer: React.FC<FreeRidePlayerProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="player-top-bar-actions">
           {/* Trainer Connection Pill */}
           <div
             className="connection-pill"

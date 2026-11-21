@@ -1174,14 +1174,14 @@ export const WorkoutRidePlayer: React.FC<WorkoutRidePlayerProps> = ({
     <div className="player-container">
       {/* Top Status Bar */}
       <div className="player-top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="player-top-bar-left">
           <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8fafc' }}>
             {workout.name}
           </div>
           <span className="brand-badge">{t('player.ergActive')}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="player-top-bar-actions">
           {/* Trainer Connection Pill (clickable mid-session!) */}
           <div
             className="connection-pill"

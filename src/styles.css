@@ -624,12 +624,39 @@ body {
 }
 
 .player-top-bar {
-  padding: 14px 24px;
+  padding: 12px 24px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 10px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: rgba(17, 24, 39, 0.95);
+}
+
+.player-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.player-top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.player-top-bar-actions .btn,
+.player-top-bar-actions .connection-pill,
+.player-top-bar-actions .power-smoothing-pill,
+.player-top-bar-left .brand-badge {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .player-cockpit-grid {
